@@ -94,6 +94,7 @@ export default function App() {
   const [tempMovieRating, setTempMovieRating] = useState<number | null>(null);
   const [voterNameInput, setVoterNameInput] = useState('');
   const [voterRatingInput, setVoterRatingInput] = useState(8.0);
+  const [isLoaded, setIsLoaded] = useState(false);
   
   // 1. Asynchronously load from standard IndexedDB on mount & perform migration if IndexedDB is currently empty
   useEffect(() => {
@@ -120,6 +121,8 @@ export default function App() {
         }
       } catch (err) {
         console.error('Error loading authoritative database from IndexedDB:', err);
+      } finally {
+        setIsLoaded(true);
       }
     };
     loadAuthoritativeData();
@@ -127,6 +130,7 @@ export default function App() {
 
   // 2. Synchronize database state to IndexedDB automatically, with a silent best-effort localStorage copy
   useEffect(() => {
+    if (!isLoaded) return; // Prevent overwriting authoritative database on startup
     const persistData = async () => {
       try {
         await saveEntriesToDB(entries);
@@ -142,7 +146,7 @@ export default function App() {
       }
     };
     persistData();
-  }, [entries]);
+  }, [entries, isLoaded]);
 
   useEffect(() => {
     try {
@@ -367,7 +371,7 @@ export default function App() {
   const handleSaveEpisode = (updatedEp: Episode, keepOpen: boolean = true) => {
     if (!activeEntry || !activeEntry.seasons || !selectedEpisode) return;
 
-    // Detect if any actor was updated inside the saved episode
+    // Detect if any actor was updated inside the saved episode (excluding characterName for role customization)
     const prevActors = selectedEpisode.episode.actors || [];
     const newActors = updatedEp.actors || [];
     
@@ -379,7 +383,6 @@ export default function App() {
       if (oldAct) {
         if (
           oldAct.name !== newAct.name ||
-          oldAct.characterName !== newAct.characterName ||
           oldAct.photoUrl !== newAct.photoUrl ||
           oldAct.bio !== newAct.bio ||
           oldAct.age !== newAct.age ||
@@ -409,7 +412,6 @@ export default function App() {
               return {
                 ...act,
                 name: changedActor!.name,
-                characterName: changedActor!.characterName !== undefined ? changedActor!.characterName : act.characterName,
                 photoUrl: changedActor!.photoUrl !== undefined ? changedActor!.photoUrl : act.photoUrl,
                 bio: changedActor!.bio !== undefined ? changedActor!.bio : act.bio,
                 age: changedActor!.age !== undefined ? changedActor!.age : act.age,
@@ -433,7 +435,6 @@ export default function App() {
               return {
                 ...act,
                 name: changedActor!.name,
-                characterName: changedActor!.characterName !== undefined ? changedActor!.characterName : act.characterName,
                 photoUrl: changedActor!.photoUrl !== undefined ? changedActor!.photoUrl : act.photoUrl,
                 bio: changedActor!.bio !== undefined ? changedActor!.bio : act.bio,
                 age: changedActor!.age !== undefined ? changedActor!.age : act.age,
@@ -461,7 +462,6 @@ export default function App() {
                     return {
                       ...act,
                       name: changedActor!.name,
-                      characterName: changedActor!.characterName !== undefined ? changedActor!.characterName : act.characterName,
                       photoUrl: changedActor!.photoUrl !== undefined ? changedActor!.photoUrl : act.photoUrl,
                       bio: changedActor!.bio !== undefined ? changedActor!.bio : act.bio,
                       age: changedActor!.age !== undefined ? changedActor!.age : act.age,
@@ -532,6 +532,62 @@ export default function App() {
       });
     } else {
       setSelectedEpisode(null);
+    }
+  };
+
+  const handleNavigateEpisode = (currentSeasonNum: number, currentEpisodeId: string, direction: 'next' | 'prev') => {
+    if (!activeEntry || !activeEntry.seasons) return;
+    
+    const seasons = activeEntry.seasons;
+    const currentSeasonIndex = seasons.findIndex(s => s.seasonNumber === currentSeasonNum);
+    if (currentSeasonIndex === -1) return;
+    
+    const currentSeason = seasons[currentSeasonIndex];
+    const currentEpisodeIndex = currentSeason.episodes.findIndex(ep => ep.id === currentEpisodeId);
+    if (currentEpisodeIndex === -1) return;
+    
+    let targetEpisode: Episode | null = null;
+    let targetSeasonNum = currentSeasonNum;
+    
+    if (direction === 'next') {
+      if (currentEpisodeIndex + 1 < currentSeason.episodes.length) {
+        targetEpisode = currentSeason.episodes[currentEpisodeIndex + 1];
+      } else {
+        // Find next non-empty season
+        let checkIdx = currentSeasonIndex + 1;
+        while (checkIdx < seasons.length) {
+          const nextS = seasons[checkIdx];
+          if (nextS && nextS.episodes && nextS.episodes.length > 0) {
+            targetEpisode = nextS.episodes[0];
+            targetSeasonNum = nextS.seasonNumber;
+            break;
+          }
+          checkIdx++;
+        }
+      }
+    } else {
+      if (currentEpisodeIndex - 1 >= 0) {
+        targetEpisode = currentSeason.episodes[currentEpisodeIndex - 1];
+      } else {
+        // Find previous non-empty season
+        let checkIdx = currentSeasonIndex - 1;
+        while (checkIdx >= 0) {
+          const prevS = seasons[checkIdx];
+          if (prevS && prevS.episodes && prevS.episodes.length > 0) {
+            targetEpisode = prevS.episodes[prevS.episodes.length - 1];
+            targetSeasonNum = prevS.seasonNumber;
+            break;
+          }
+          checkIdx--;
+        }
+      }
+    }
+    
+    if (targetEpisode) {
+      setSelectedEpisode({
+        seasonNum: targetSeasonNum,
+        episode: targetEpisode
+      });
     }
   };
 
@@ -1254,12 +1310,12 @@ export default function App() {
                       {activeEntry.movieYoutubeUrl ? (
                         <div className="space-y-2">
                           <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-                            <Play size={14} className="fill-red-500 text-red-500" /> Embedded Movie Trailer
+                            <Play size={14} className="fill-red-500 text-red-500" /> Gledaj Puni Film
                           </h4>
                           <div className="aspect-video w-full rounded-xl overflow-hidden bg-black border border-zinc-800">
                             <iframe
                               src={activeEntry.movieYoutubeUrl}
-                              title={`${activeEntry.name} Trailer video`}
+                              title={`${activeEntry.name} Puni film`}
                               className="w-full h-full"
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                               allowFullScreen
@@ -1268,8 +1324,8 @@ export default function App() {
                         </div>
                       ) : (
                         <div className="flex flex-col items-center justify-center p-8 bg-zinc-950/30 rounded-xl border border-dashed border-zinc-800 border-zinc-700 min-h-[160px] text-center">
-                          <p className="text-xs text-zinc-500">No official trailer URL configured for this feature.</p>
-                          <p className="text-[11px] text-zinc-600 mt-1">To connect trailers, recreate the card and paste a YouTube clip embed link.</p>
+                          <p className="text-xs text-zinc-500">Nema unesenog linka filma za ovaj naslov.</p>
+                          <p className="text-[11px] text-zinc-600 mt-1">Da biste dodali film, uredite detalje i unesite YouTube embed link filma.</p>
                         </div>
                       )}
                     </div>
@@ -1414,17 +1470,57 @@ export default function App() {
       </footer>
 
       {/* RATING DETAIL POPUP MODAL (EDITING/YOUTUBE STREAMING) */}
-      {selectedEpisode && activeEntry?.seasons && (
-        <DetailPopup
-          episode={selectedEpisode.episode}
-          seasonNumber={selectedEpisode.seasonNum}
-          onClose={() => setSelectedEpisode(null)}
-          onSave={handleSaveEpisode}
-          onDelete={handleDeleteEpisode}
-          allEntriesAvailable={entries}
-          onNavigateToEntry={handleNavigateFromActorCatalog}
-        />
-      )}
+      {selectedEpisode && activeEntry?.seasons && (() => {
+        const seasons = activeEntry.seasons;
+        const sIndex = seasons.findIndex(s => s.seasonNumber === selectedEpisode.seasonNum);
+        if (sIndex === -1) return null;
+        
+        const epIndex = seasons[sIndex].episodes.findIndex(ep => ep.id === selectedEpisode.episode.id);
+        if (epIndex === -1) return null;
+        
+        let hasNext = false;
+        if (epIndex + 1 < seasons[sIndex].episodes.length) {
+          hasNext = true;
+        } else {
+          let checkIdx = sIndex + 1;
+          while (checkIdx < seasons.length) {
+            if (seasons[checkIdx].episodes && seasons[checkIdx].episodes.length > 0) {
+              hasNext = true;
+              break;
+            }
+            checkIdx++;
+          }
+        }
+        
+        let hasPrev = false;
+        if (epIndex - 1 >= 0) {
+          hasPrev = true;
+        } else {
+          let checkIdx = sIndex - 1;
+          while (checkIdx >= 0) {
+            if (seasons[checkIdx].episodes && seasons[checkIdx].episodes.length > 0) {
+              hasPrev = true;
+              break;
+            }
+            checkIdx--;
+          }
+        }
+
+        return (
+          <DetailPopup
+            episode={selectedEpisode.episode}
+            seasonNumber={selectedEpisode.seasonNum}
+            onClose={() => setSelectedEpisode(null)}
+            onSave={handleSaveEpisode}
+            onDelete={handleDeleteEpisode}
+            allEntriesAvailable={entries}
+            onNavigateToEntry={handleNavigateFromActorCatalog}
+            onNavigateEpisode={(dir) => handleNavigateEpisode(selectedEpisode.seasonNum, selectedEpisode.episode.id, dir)}
+            hasNextEpisode={hasNext}
+            hasPrevEpisode={hasPrev}
+          />
+        );
+      })()}
 
       {/* ADD BRAND NEW SLATE ITEM MODAL */}
       {isAddModalOpen && (

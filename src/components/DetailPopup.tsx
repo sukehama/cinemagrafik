@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Episode, Actor, GuestReview, RatingEntry } from '../types';
 import { getYoutubeEmbedUrl, getRatingColorClass } from '../utils';
-import { X, Youtube, Save, Trash2, Edit2, Play, Star, Upload, Plus, Users, MessageSquare, Film, Tv, ChevronRight } from 'lucide-react';
+import { X, Youtube, Save, Trash2, Edit2, Play, Star, Upload, Plus, Users, MessageSquare, Film, Tv, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 
 interface DetailPopupProps {
   episode: Episode;
@@ -12,6 +12,9 @@ interface DetailPopupProps {
   onDelete?: () => void;
   allEntriesAvailable: RatingEntry[];
   onNavigateToEntry?: (entryId: string, seasonNum?: number, episodeNum?: number) => void;
+  onNavigateEpisode?: (direction: 'next' | 'prev') => void;
+  hasNextEpisode?: boolean;
+  hasPrevEpisode?: boolean;
 }
 
 const BRIEF_AVATAR_PRESETS = [
@@ -28,7 +31,10 @@ export default function DetailPopup({
   onSave,
   onDelete,
   allEntriesAvailable = [],
-  onNavigateToEntry
+  onNavigateToEntry,
+  onNavigateEpisode,
+  hasNextEpisode = false,
+  hasPrevEpisode = false
 }: DetailPopupProps) {
   const [name, setName] = useState(episode.name);
   const [rating, setRating] = useState(episode.rating);
@@ -61,6 +67,98 @@ export default function DetailPopup({
   const [newActorBio, setNewActorBio] = useState('');
   const [newActorOtherInfo, setNewActorOtherInfo] = useState('');
   const [autofillSuccessMsg, setAutofillSuccessMsg] = useState('');
+
+  // Actor search & multi-select states
+  const [actorSearchQuery, setActorSearchQuery] = useState('');
+  const [selectedActorsMap, setSelectedActorsMap] = useState<{[actorId: string]: { actor: Actor; characterName: string }}>({});
+  const [activeActorTab, setActiveActorTab] = useState<'search' | 'new'>('search');
+
+  // Synchronize internal state when the active episode is changed via Next/Prev navigation
+  useEffect(() => {
+    setName(episode.name);
+    setRating(episode.rating);
+    setImageUrl(episode.imageUrl || '');
+    setYoutubeUrl(episode.youtubeUrl || '');
+    setOverview(episode.overview || '');
+    setLinkText(episode.linkText || '');
+    setLinkTargetId(episode.linkTargetId || '');
+    setGuestReviews(episode.guestReviews || []);
+    setActors(episode.actors || []);
+    setIsEditing(false);
+    setShowTrailer(false);
+    setIsAddingReview(false);
+    setIsAddingActor(false);
+    setActorSearchQuery('');
+    setSelectedActorsMap({});
+    setActiveActorTab('search');
+  }, [episode]);
+
+  const handleToggleDbActor = (act: Actor) => {
+    setSelectedActorsMap(prev => {
+      const exists = !!prev[act.id];
+      const next = { ...prev };
+      if (exists) {
+        delete next[act.id];
+      } else {
+        next[act.id] = {
+          actor: act,
+          characterName: act.characterName || ''
+        };
+      }
+      return next;
+    });
+  };
+
+  const handleUpdateCharacterForSelected = (actorId: string, charName: string) => {
+    setSelectedActorsMap(prev => {
+      if (!prev[actorId]) return prev;
+      return {
+        ...prev,
+        [actorId]: {
+          ...prev[actorId],
+          characterName: charName
+        }
+      };
+    });
+  };
+
+  const handleAddSelectedActorsDone = () => {
+    const selectedList = Object.values(selectedActorsMap);
+    if (selectedList.length === 0) {
+      setIsAddingActor(false);
+      return;
+    }
+    
+    const newActorsToAdd: Actor[] = selectedList.map(item => ({
+      id: `act-${Date.now()}-${Math.random().toString().slice(-4)}`,
+      name: item.actor.name,
+      characterName: item.characterName.trim() || undefined,
+      photoUrl: item.actor.photoUrl,
+      bio: item.actor.bio,
+      age: item.actor.age,
+      otherInfo: item.actor.otherInfo
+    }));
+    
+    const updatedActors = [...actors, ...newActorsToAdd];
+    setActors(updatedActors);
+    
+    onSave({
+      ...episode,
+      name,
+      rating: Number(rating),
+      imageUrl: imageUrl || undefined,
+      youtubeUrl: youtubeUrl || undefined,
+      overview: overview || undefined,
+      guestReviews,
+      actors: updatedActors,
+      linkText: linkText || undefined,
+      linkTargetId: linkTargetId || undefined
+    });
+    
+    setSelectedActorsMap({});
+    setActorSearchQuery('');
+    setIsAddingActor(false);
+  };
 
   const handleNewActorNameChange = (val: string) => {
     setNewActorName(val);
@@ -522,6 +620,36 @@ export default function DetailPopup({
                 </div>
               )}
 
+              {/* Next/Prev Navigation Buttons */}
+              <div className="absolute top-4 left-4 flex items-center gap-1.5 z-20">
+                <button
+                  type="button"
+                  disabled={!hasPrevEpisode}
+                  onClick={() => onNavigateEpisode?.('prev')}
+                  className={`p-1.5 rounded-full border text-zinc-300 transition-all flex items-center justify-center ${
+                    hasPrevEpisode 
+                      ? 'bg-zinc-950/80 hover:bg-zinc-900 border-zinc-800 hover:text-yellow-405 hover:border-yellow-405/45 active:scale-90 cursor-pointer' 
+                      : 'bg-zinc-950/30 border-zinc-900/50 text-zinc-650 cursor-not-allowed opacity-40'
+                  }`}
+                  title="Prethodna epizoda"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  type="button"
+                  disabled={!hasNextEpisode}
+                  onClick={() => onNavigateEpisode?.('next')}
+                  className={`p-1.5 rounded-full border text-zinc-300 transition-all flex items-center justify-center ${
+                    hasNextEpisode 
+                      ? 'bg-zinc-950/80 hover:bg-zinc-900 border-zinc-800 hover:text-yellow-405 hover:border-yellow-405/45 active:scale-90 cursor-pointer' 
+                      : 'bg-zinc-950/30 border-zinc-900/50 text-zinc-650 cursor-not-allowed opacity-40'
+                  }`}
+                  title="Sljedeća epizoda"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+
               {/* Edit/Delete/Close buttons in floating top bar */}
               <div className="absolute top-4 right-4 flex items-center gap-1.5 z-20">
                 <button
@@ -795,132 +923,225 @@ export default function DetailPopup({
                 </div>
 
                 {isAddingActor && (
-                  <form onSubmit={handleAddActorSubmit} className="space-y-3 bg-zinc-950 p-3.5 rounded-xl border border-zinc-850">
-                    <h5 className="text-[9px] font-bold text-zinc-400 uppercase">Dodaj novog glumca u postavu</h5>
-
-                    {/* PRESETS LIST FOR FAST COPY/PASTE SELECT */}
-                    {existingActors.length > 0 && (
-                      <div className="space-y-1 bg-zinc-900/40 p-2.5 rounded-xl border border-zinc-900">
-                        <span className="block text-[8px] uppercase font-bold text-zinc-400">
-                          Brzi odabir postojećih likova (Šabloni / Presets):
-                        </span>
-                        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                          {existingActors.map(act => (
-                            <button
-                              key={`p-act-${act.id}`}
-                              type="button"
-                              onClick={() => {
-                                setNewActorName(act.name);
-                                setNewActorCharacter(act.characterName || '');
-                                setNewActorPhoto(act.photoUrl || '');
-                                setNewActorBio(act.bio || '');
-                                setNewActorOtherInfo(act.otherInfo || '');
-                                setAutofillSuccessMsg(`Izabran šablon "${act.name}"! Podaci su učitani. 👥`);
-                              }}
-                              className="shrink-0 flex items-center gap-1.5 px-2 py-1 bg-zinc-900 hover:bg-zinc-805 text-zinc-350 rounded border border-zinc-800 text-[8px] font-medium transition active:scale-95 cursor-pointer"
-                            >
-                              {act.photoUrl && (
-                                <img src={act.photoUrl} alt={act.name} className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
-                              )}
-                              <span>{act.name} <span className="text-zinc-500">({act.characterName || 'Nema uloge'})</span></span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Ime glumca *</label>
-                        <input
-                          type="text"
-                          required
-                          value={newActorName}
-                          onChange={(e) => handleNewActorNameChange(e.target.value)}
-                          placeholder="npr. Bryan Cranston"
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-105 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Naziv lika u projektu</label>
-                        <input
-                          type="text"
-                          value={newActorCharacter}
-                          onChange={(e) => setNewActorCharacter(e.target.value)}
-                          placeholder="npr. Walter White"
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-105 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                    </div>
-
-                    {autofillSuccessMsg && (
-                      <div className="bg-emerald-950/40 border border-emerald-900/50 px-3 py-1.5 rounded-lg text-[10px] text-emerald-400 font-semibold animate-pulse">
-                        {autofillSuccessMsg}
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Fotografija (Upload ili URL)</label>
-                      <div className="flex gap-1.5">
-                        <input
-                          type="text"
-                          value={newActorPhoto}
-                          onChange={(e) => setNewActorPhoto(e.target.value)}
-                          placeholder="Unesite URL slike"
-                          className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
-                        />
-                        <label className="flex items-center justify-center gap-1 border border-dashed border-zinc-800 hover:border-emerald-400 bg-zinc-900/40 hover:bg-zinc-950 px-2.5 py-1 rounded-lg cursor-pointer transition text-center shrink-0">
-                          <Upload size={10} className="text-zinc-500" />
-                          <span className="text-[9px] text-zinc-400 uppercase font-bold">Izaberi</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleActorPhotoUpload}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      <div>
-                        <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Zanimljivosti / Biografija</label>
-                        <textarea
-                          value={newActorBio}
-                          onChange={(e) => setNewActorBio(e.target.value)}
-                          placeholder="Uporedne kratke biografske crtice..."
-                          rows={2}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Nagrade, Nominacije ili Trivia</label>
-                        <textarea
-                          value={newActorOtherInfo}
-                          onChange={(e) => setNewActorOtherInfo(e.target.value)}
-                          placeholder="npr. Osvojen Oscar za filmsku ulogu, 3 nominacije za Emmy..."
-                          rows={2}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
+                  <div className="space-y-3 bg-zinc-950 p-4 rounded-xl border border-zinc-850">
+                    {/* Tabs bar */}
+                    <div className="flex border-b border-zinc-850 pb-2 mb-3">
                       <button
-                        type="submit"
-                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-black text-[10px] uppercase py-2 rounded-lg cursor-pointer"
+                        type="button"
+                        onClick={() => setActiveActorTab('search')}
+                        className={`flex-1 text-[10px] font-extrabold uppercase tracking-wider py-1.5 border-b-2 text-center transition ${
+                          activeActorTab === 'search' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500 hover:text-zinc-400'
+                        }`}
                       >
-                        Potvrdi i dodaj
+                        Odabir iz baze (Pretraga)
                       </button>
                       <button
                         type="button"
-                        onClick={() => setIsAddingActor(false)}
-                        className="bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-[10px] px-3 py-2 rounded-lg cursor-pointer"
+                        onClick={() => setActiveActorTab('new')}
+                        className={`flex-1 text-[10px] font-extrabold uppercase tracking-wider py-1.5 border-b-2 text-center transition ${
+                          activeActorTab === 'new' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500 hover:text-zinc-400'
+                        }`}
                       >
-                        Otkaži
+                        Dodaj potpuno novog glumca
                       </button>
                     </div>
-                  </form>
+
+                    {activeActorTab === 'search' ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Pretraži glumce po imenu</label>
+                          <input
+                            type="text"
+                            value={actorSearchQuery}
+                            onChange={(e) => setActorSearchQuery(e.target.value)}
+                            placeholder="Upišite ime glumca..."
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
+                          />
+                        </div>
+
+                        {/* List of matching database actors */}
+                        <div className="space-y-2 max-h-56 overflow-y-auto pr-1 scrollbar-thin">
+                          {(() => {
+                            const filtered = existingActors.filter(act => 
+                              act.name.toLowerCase().includes(actorSearchQuery.toLowerCase().trim())
+                            );
+                            
+                            if (filtered.length === 0) {
+                              return (
+                                <p className="text-[10px] text-zinc-650 italic text-center py-4">
+                                  Nema pronađenih glumaca u bazi. Iskoristite tab "Dodaj potpuno novog glumca" da unesete novog!
+                                </p>
+                              );
+                            }
+                            
+                            return filtered.map(act => {
+                              const isChecked = !!selectedActorsMap[act.id];
+                              return (
+                                <div 
+                                  key={`db-act-${act.id}`}
+                                  className={`p-2 rounded-lg border transition-all ${
+                                    isChecked ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm' : 'bg-zinc-900/40 border-zinc-900 hover:bg-zinc-900'
+                                  } flex flex-col gap-2`}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleDbActor(act)}
+                                      className="flex items-center gap-2.5 text-left flex-1 min-w-0 cursor-pointer"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {}} // Controlled by outer button
+                                        className="rounded border-zinc-800 text-emerald-500 accent-emerald-500 cursor-pointer w-3.5 h-3.5 shrink-0"
+                                      />
+                                      {act.photoUrl && (
+                                        <img src={act.photoUrl} alt={act.name} className="w-7 h-7 rounded-full object-cover shrink-0 border border-zinc-800" referrerPolicy="no-referrer" />
+                                      )}
+                                      <div className="min-w-0">
+                                        <p className="font-bold text-zinc-200 text-xs truncate">{act.name}</p>
+                                        <p className="text-[9px] text-zinc-500 truncate">Zadnja uloga: {act.characterName || 'Nema'}</p>
+                                      </div>
+                                    </button>
+                                  </div>
+                                  
+                                  {isChecked && (
+                                    <div className="flex items-center gap-2 pl-6 pt-1.5 border-t border-zinc-900/60">
+                                      <span className="text-[9px] text-zinc-400 font-bold shrink-0">Uloga / Lik u ovoj epizodi/filmu:</span>
+                                      <input
+                                        type="text"
+                                        placeholder="npr. Walter White"
+                                        value={selectedActorsMap[act.id].characterName}
+                                        onChange={(e) => handleUpdateCharacterForSelected(act.id, e.target.value)}
+                                        className="flex-1 bg-zinc-950 border border-zinc-800 focus:border-emerald-500 rounded px-2.5 py-0.5 text-zinc-200 text-[10px] focus:outline-none"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+
+                        {/* Actions for selection */}
+                        <div className="flex gap-2 pt-2 border-t border-zinc-850/60">
+                          <button
+                            type="button"
+                            onClick={handleAddSelectedActorsDone}
+                            className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-black text-[10px] uppercase py-2 rounded-lg cursor-pointer flex items-center justify-center gap-1 transition active:scale-95"
+                          >
+                            <Check size={11} /> Završeno ({Object.keys(selectedActorsMap).length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedActorsMap({});
+                              setActorSearchQuery('');
+                              setIsAddingActor(false);
+                            }}
+                            className="bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-[10px] px-3 py-2 rounded-lg cursor-pointer"
+                          >
+                            Odustani
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Fully new actor manual form */
+                      <form onSubmit={handleAddActorSubmit} className="space-y-3">
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Ime glumca *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newActorName}
+                              onChange={(e) => handleNewActorNameChange(e.target.value)}
+                              placeholder="npr. Bryan Cranston"
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Naziv lika u projektu</label>
+                            <input
+                              type="text"
+                              value={newActorCharacter}
+                              onChange={(e) => setNewActorCharacter(e.target.value)}
+                              placeholder="npr. Walter White"
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+
+                        {autofillSuccessMsg && (
+                          <div className="bg-emerald-950/40 border border-emerald-900/50 px-3 py-1.5 rounded-lg text-[10px] text-emerald-400 font-semibold animate-pulse">
+                            {autofillSuccessMsg}
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Fotografija (Upload ili URL)</label>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={newActorPhoto}
+                              onChange={(e) => setNewActorPhoto(e.target.value)}
+                              placeholder="Unesite URL slike"
+                              className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                            <label className="flex items-center justify-center gap-1 border border-dashed border-zinc-800 hover:border-emerald-400 bg-zinc-900/40 hover:bg-zinc-950 px-2.5 py-1 rounded-lg cursor-pointer transition text-center shrink-0">
+                              <Upload size={10} className="text-zinc-500" />
+                              <span className="text-[9px] text-zinc-400 uppercase font-bold">Izaberi</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleActorPhotoUpload}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Zanimljivosti / Biografija</label>
+                            <textarea
+                              value={newActorBio}
+                              onChange={(e) => setNewActorBio(e.target.value)}
+                              placeholder="Kratke biografske crtice..."
+                              rows={2}
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Nagrade, Nominacije ili Trivia</label>
+                            <textarea
+                              value={newActorOtherInfo}
+                              onChange={(e) => setNewActorOtherInfo(e.target.value)}
+                              placeholder="npr. 3 nominacije za Emmy..."
+                              rows={2}
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-black text-[10px] uppercase py-2 rounded-lg cursor-pointer transition active:scale-95"
+                          >
+                            Potvrdi i dodaj
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingActor(false)}
+                            className="bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-[10px] px-3 py-2 rounded-lg cursor-pointer"
+                          >
+                            Odustani
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
                 )}
 
                 {/* Actor Grid list */}

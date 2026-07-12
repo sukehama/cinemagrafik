@@ -548,7 +548,7 @@ export default function AddEntryModal({ onClose, onAdd }: AddEntryModalProps) {
 
               <div>
                 <label className="block text-[11px] font-bold text-zinc-400 uppercase mb-1">
-                  YouTube trailer / clip URL link
+                  YouTube link filma (embed ili puni video)
                 </label>
                 <input
                   type="text"
