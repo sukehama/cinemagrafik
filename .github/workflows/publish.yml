@@ -1,0 +1,38 @@
+name: 'publish'
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers the workflow whenever you push a tag starting with 'v' (e.g., v0.1.3)
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: install frontend dependencies
+        run: npm install
+
+      - name: Build and Release App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tagName: app-v__VERSION__ # e.g., app-v0.1.3
+          releaseName: 'CinemaGrafik v__VERSION__'
+          releaseBody: 'See the assets below to download the latest update.'
+          releaseDraft: true
+          prerelease: false
