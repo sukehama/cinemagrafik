@@ -1,0 +1,6 @@
+{
+  "name": "Cinema Grafik",
+  "description": "Interaktivni sistem za ocjenjivanje i vizualizaciju serija, filmova i filmskih univerzuma. Donosi detaljne matrice epizoda, statistike, alternativne verzije i glumačke profile.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
