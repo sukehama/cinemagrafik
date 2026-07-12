@@ -3,7 +3,7 @@ name: 'publish'
 on:
   push:
     tags:
-      - 'v*' # Triggers the workflow whenever you push a tag starting with 'v' (e.g., v0.1.3)
+      - 'v*'
 
 jobs:
   publish-tauri:
@@ -31,7 +31,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
-          tagName: app-v__VERSION__ # e.g., app-v0.1.3
+          tagName: app-v__VERSION__
           releaseName: 'CinemaGrafik v__VERSION__'
           releaseBody: 'See the assets below to download the latest update.'
           releaseDraft: true
