@@ -21,14 +21,6 @@
     ],
     "security": {
       "csp": null
-    },
-    "plugins": {
-      "updater": {
-        "endpoints": [
-          "https://github.com/sukehama/cinemagrafik/releases/latest/download/latest.json"
-        ],
-        "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENENDMyOThCRjg1RURDQzQKUldURTNGNzRpeWxEemRlNzhvbW0yL09JMURZejFodW82QnVOMEMyRGhlb0l1andSTERhV2Uxci8K"
-      }
     }
   },
   "bundle": {
@@ -44,6 +36,14 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENENDMyOThCRjg1RURDQzQKUldURTNGNzRpeWxEemRlNzhvbW0yL09JMURZejFodW82QnVOMEMyRGhlb0l1andSTERhV2Uxci8K"
     }
   }
 }
