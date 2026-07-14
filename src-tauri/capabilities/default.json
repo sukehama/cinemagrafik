@@ -1,13 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
-  "windows": [
-    "main"
-  ],
+  "description": "Default permissions for the app",
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "updater:default",
-    "core:process:allow-relaunch"
+    "process:allow-relaunch"
   ]
 }
