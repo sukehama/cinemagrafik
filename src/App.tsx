@@ -42,6 +42,8 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 
 export default function App() {
   // Theme state: Forced permanently to true (IMDb identical native dark mode) as requested by user
@@ -75,6 +77,29 @@ export default function App() {
     }
     return '';
   });
+
+// 2.5. Automatska provjera i instalacija ažuriranja aplikacije s GitHuba pri pokretanju
+  useEffect(() => {
+    const izvrsiProvjeruAzuriranja = async () => {
+      try {
+        const update = await check();
+        if (update) {
+          console.log(`Pronađena nova verzija: ${update.version}`);
+          // Preuzmi novi .zip paket nečujno u pozadini
+          await update.downloadAndInstall();
+          // Ugasi trenutnu verziju, zamijeni .exe i ponovo otvori aplikaciju
+          await relaunch();
+        }
+      } catch (err) {
+        console.error('Greška tokom automatske provjere ažuriranja:', err);
+      }
+    };
+    
+    // Pokreće se samo jednom kada se aplikacija upali i kada je baza spremna
+    if (isLoaded) {
+      izvrsiProvjeruAzuriranja();
+    }
+  }, [isLoaded]);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
