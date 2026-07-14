@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
@@ -16,6 +16,21 @@ import SurpriseMeModal from './components/SurpriseMeModal';
 import BulkEditModal from './components/BulkEditModal';
 import ActorsView from './components/ActorsView';
 import LeaderboardView from './components/LeaderboardView';
+import UserProfileModal from './components/UserProfileModal';
+
+// Firebase imports
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { auth, loginWithGoogle, logout } from './firebase';
+import { 
+  syncFirestoreEntries, 
+  saveEntryToFirestore, 
+  deleteEntryFromFirestore, 
+  syncUserProfile, 
+  fetchContributions, 
+  ContributionLog, 
+  UserProfile 
+} from './firebaseSync';
+
 import { 
   Tv, 
   Film, 
@@ -43,7 +58,10 @@ import {
   Trophy,
   ChevronLeft,
   ChevronRight,
-  Home
+  Home,
+  LogOut,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 export default function App() {
@@ -128,6 +146,23 @@ export default function App() {
   const [voterNameInput, setVoterNameInput] = useState('');
   const [voterRatingInput, setVoterRatingInput] = useState(8.0);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Firebase Authentication & Sync States
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [recentContributions, setRecentContributions] = useState<ContributionLog[]>([]);
+  const [isContributionsLoading, setIsContributionsLoading] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [showSignInDropdown, setShowSignInDropdown] = useState(false);
+
+  // Synchronization References to prevent race conditions & loop feedback
+  const isApplyingSnapshotRef = useRef(false);
+  const isFirestoreSyncedRef = useRef(false);
+  const prevEntriesRef = useRef<RatingEntry[]>([]);
+  const hasStartedSync = useRef(false);
 
   // Movie actors creation and search states
   const [isAddingMovieActor, setIsAddingMovieActor] = useState(false);
@@ -216,6 +251,132 @@ export default function App() {
     };
     persistData();
   }, [entries, isLoaded]);
+
+  // A. Listen to Firebase Authentication changes and sync user profile
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setIsAuthLoading(false);
+      if (currentUser) {
+        try {
+          const profile = await syncUserProfile(currentUser);
+          setUserProfile(profile);
+        } catch (err) {
+          console.error("Failed to sync user profile on auth state change:", err);
+        }
+      } else {
+        setUserProfile(null);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // B. Subscribe to Firestore real-time sync for universal catalog after local IndexedDB load
+  useEffect(() => {
+    if (!isLoaded || hasStartedSync.current) return;
+    hasStartedSync.current = true;
+    
+    console.log(`[Firebase] Starting real-time Firestore sync with ${entries.length} local candidate entries...`);
+    
+    const unsubscribe = syncFirestoreEntries(
+      entries, // Current local entries to migrate if Firestore is empty
+      (syncedEntries) => {
+        isApplyingSnapshotRef.current = true;
+        setEntries(syncedEntries);
+      },
+      (syncing, error) => {
+         setIsSyncing(syncing);
+         setSyncError(error || null);
+         if (!syncing && !error) {
+           isFirestoreSyncedRef.current = true;
+         }
+      }
+    );
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [isLoaded]);
+
+  // C. Synchronize local catalog edits automatically back to the universal Firestore collection
+  useEffect(() => {
+    if (!isLoaded || !isFirestoreSyncedRef.current) return;
+    
+    const syncLocalChangesToFirestore = async () => {
+      if (isApplyingSnapshotRef.current) {
+        // This state update came from Firestore, so we don't write it back
+        isApplyingSnapshotRef.current = false;
+        prevEntriesRef.current = entries;
+        return;
+      }
+      
+      // Compare entries with prevEntriesRef.current to find deleted or modified items
+      const prevMap = new Map(prevEntriesRef.current.map(e => [e.id, e]));
+      const currentMap = new Map(entries.map(e => [e.id, e]));
+      
+      // 1. Find deleted entries
+      for (const prevEntry of prevEntriesRef.current) {
+        if (!currentMap.has(prevEntry.id)) {
+          console.log(`[Sync] Local deletion detected for: ${prevEntry.name}`);
+          try {
+            await deleteEntryFromFirestore(
+              prevEntry.id, 
+              prevEntry.name, 
+              user?.uid, 
+              userProfile?.displayName || user?.displayName || undefined,
+              userProfile?.photoURL || user?.photoURL || undefined
+            );
+          } catch (err) {
+            console.error(`Failed to sync deletion for ${prevEntry.name}:`, err);
+          }
+        }
+      }
+      
+      // 2. Find added or modified entries
+      for (const currentEntry of entries) {
+        const prevEntry = prevMap.get(currentEntry.id);
+        const isNew = !prevEntry;
+        const isModified = prevEntry && JSON.stringify(prevEntry) !== JSON.stringify(currentEntry);
+        
+         if (isNew || isModified) {
+           console.log(`[Sync] Local ${isNew ? 'addition' : 'modification'} detected for: ${currentEntry.name}`);
+           try {
+             await saveEntryToFirestore(
+               currentEntry,
+               isNew ? 'add' : 'edit',
+               user?.uid,
+               userProfile?.displayName || user?.displayName || undefined,
+               userProfile?.photoURL || user?.photoURL || undefined
+             );
+           } catch (err) {
+             console.error(`Failed to sync ${isNew ? 'add' : 'edit'} for ${currentEntry.name}:`, err);
+           }
+         }
+       }
+       
+       prevEntriesRef.current = entries;
+     };
+     
+     syncLocalChangesToFirestore();
+   }, [entries, isLoaded, user, userProfile]);
+
+  // D. Load contributions history when user opens the profile view
+  useEffect(() => {
+    if (isProfileOpen) {
+      const loadContributions = async () => {
+        setIsContributionsLoading(true);
+        try {
+          const logs = await fetchContributions();
+          setRecentContributions(logs);
+        } catch (err) {
+          console.error("Failed to fetch contributions log:", err);
+        } finally {
+          setIsContributionsLoading(false);
+        }
+      };
+      loadContributions();
+    }
+  }, [isProfileOpen]);
 
   useEffect(() => {
     try {
@@ -1307,6 +1468,92 @@ export default function App() {
             >
               <Plus size={16} strokeWidth={3} />
             </button>
+
+            {/* PROFILE / GOOGLE SIGN-IN BUTTON */}
+            <div className="relative">
+              {isAuthLoading ? (
+                <div className="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                  <RefreshCw size={14} className="text-zinc-500 animate-spin" />
+                </div>
+              ) : user ? (
+                // LOGGED IN: Beautiful profile image with status ring and click action
+                <button
+                  onClick={() => setIsProfileOpen(true)}
+                  className="flex items-center gap-1.5 focus:outline-none group cursor-pointer"
+                  title={`Profil: ${user.displayName}`}
+                >
+                  <div className="relative">
+                    <img 
+                      src={user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80'} 
+                      alt={user.displayName || 'Korisnik'} 
+                      className="w-9 h-9 rounded-full border-2 border-yellow-400 group-hover:border-yellow-500 transition object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-zinc-950 bg-emerald-400 animate-pulse" />
+                  </div>
+                </button>
+              ) : (
+                // NOT LOGGED IN: Empty profile outline icon. Click shows dropdown or triggers login.
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSignInDropdown(!showSignInDropdown)}
+                    className={`w-9 h-9 rounded-full bg-zinc-900 border flex items-center justify-center transition cursor-pointer ${
+                      showSignInDropdown ? 'border-yellow-400 text-yellow-400' : 'border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                    }`}
+                    title="Prijavite se s Google-om"
+                  >
+                    <User size={16} />
+                  </button>
+
+                  <AnimatePresence>
+                    {showSignInDropdown && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-72 bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-2xl z-50 text-left space-y-4"
+                      >
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Prijavite Se</h4>
+                          <p className="text-[10px] text-zinc-400 leading-relaxed">
+                            Prijavite se Google računom kako biste sinkronizirali svoj katalog i pregledali doprinose na svim uređajima!
+                          </p>
+                        </div>
+
+                        {syncError && (
+                          <div className="bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl flex gap-2 text-[10px] text-red-400 font-bold leading-relaxed">
+                            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                            <span>{syncError}</span>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={async () => {
+                            setShowSignInDropdown(false);
+                            try {
+                              await loginWithGoogle();
+                            } catch (err: any) {
+                              setSyncError(err.message || 'Prijava nije uspjela');
+                            }
+                          }}
+                          className="w-full flex items-center justify-center gap-2.5 bg-white hover:bg-zinc-100 text-zinc-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer shadow-lg"
+                        >
+                          {/* Google logo icon */}
+                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                          </svg>
+                          Google Prijava
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -2680,6 +2927,24 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* USER PROFILE MODAL */}
+      <UserProfileModal
+        user={user}
+        profile={userProfile}
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        onLogout={async () => {
+          try {
+            await logout();
+            setIsProfileOpen(false);
+          } catch (err) {
+            console.error("Failed to log out:", err);
+          }
+        }}
+        recentContributions={recentContributions}
+        isLoadingContributions={isContributionsLoading}
+      />
 
       </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}
     </div>
