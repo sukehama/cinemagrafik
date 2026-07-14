@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { RatingEntry, Episode, Season, SortKey, SortOrder, Actor } from './types';
 import { DEFAULT_ENTRIES } from './data';
 import { getEntriesFromDB, saveEntriesToDB } from './db';
@@ -42,8 +44,6 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
-import { check } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
 
 export default function App() {
   // Theme state: Forced permanently to true (IMDb identical native dark mode) as requested by user
@@ -78,29 +78,6 @@ export default function App() {
     return '';
   });
 
-// 2.5. Automatska provjera i instalacija ažuriranja aplikacije s GitHuba pri pokretanju
-  useEffect(() => {
-    const izvrsiProvjeruAzuriranja = async () => {
-      try {
-        const update = await check();
-        if (update) {
-          console.log(`Pronađena nova verzija: ${update.version}`);
-          // Preuzmi novi .zip paket nečujno u pozadini
-          await update.downloadAndInstall();
-          // Ugasi trenutnu verziju, zamijeni .exe i ponovo otvori aplikaciju
-          await relaunch();
-        }
-      } catch (err) {
-        console.error('Greška tokom automatske provjere ažuriranja:', err);
-      }
-    };
-    
-    // Pokreće se samo jednom kada se aplikacija upali i kada je baza spremna
-    if (isLoaded) {
-      izvrsiProvjeruAzuriranja();
-    }
-  }, [isLoaded]);
-
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortKey>('rating');
@@ -117,6 +94,10 @@ export default function App() {
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [selectedEpisode, setSelectedEpisode] = useState<{ seasonNum: number; episode: Episode } | null>(null);
+
+  // Universal search dialog state
+  const [isUniversalSearchOpen, setIsUniversalSearchOpen] = useState(false);
+  const [universalQuery, setUniversalQuery] = useState('');
 
   // Main Tab Navigation & Sidebar collapsible state
   const [activeTab, setActiveTab] = useState<'katalog' | 'glumci' | 'leaderboard'>('katalog');
@@ -177,6 +158,30 @@ export default function App() {
       }
     };
     loadAuthoritativeData();
+  }, []);
+
+  // Tauri Auto-Updater Effect
+  useEffect(() => {
+    const runAutoUpdater = async () => {
+      // Only execute if running within Tauri container runtime
+      if (typeof window !== 'undefined' && (window as any).__TAURI__) {
+        try {
+          console.log('[Tauri Updater] Checking for available updates on GitHub...');
+          const update = await check();
+          if (update && update.available) {
+            console.log(`[Tauri Updater] Update found! Version: ${update.version}. Downloading...`);
+            await update.downloadAndInstall();
+            console.log('[Tauri Updater] Update downloaded successfully. Relaunching application...');
+            await relaunch();
+          } else {
+            console.log('[Tauri Updater] Application is already up to date!');
+          }
+        } catch (error) {
+          console.error('[Tauri Updater] Error occurred while performing auto-update check:', error);
+        }
+      }
+    };
+    runAutoUpdater();
   }, []);
 
   // 2. Synchronize database state to IndexedDB automatically, with a silent best-effort localStorage copy
@@ -280,6 +285,49 @@ export default function App() {
     
     return Array.from(map.values()).sort((a, b) => a.actor.name.localeCompare(b.actor.name));
   }, [entries]);
+
+  // Universal Search event listener for Ctrl+K, Cmd+K, and "/"
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsUniversalSearchOpen(prev => !prev);
+        setUniversalQuery('');
+      }
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        setIsUniversalSearchOpen(true);
+        setUniversalQuery('');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Compute matched entries and actors for autocomplete universal search
+  const universalSearchResults = useMemo(() => {
+    const query = universalQuery.toLowerCase().trim();
+    if (!query) return { entries: [], actors: [] };
+
+    // Match movies, shows, universes
+    const matchedEntries = entries.filter(e => e.name.toLowerCase().includes(query));
+
+    // Match actors (by name, primary characterName, or specific role/episode names)
+    const matchedActors = allActorsWithAppearances.filter(a => {
+      const nameMatch = a.actor.name.toLowerCase().includes(query);
+      const characterMatch = a.actor.characterName && a.actor.characterName.toLowerCase().includes(query);
+      const hasInRoles = a.appearances.some(app => 
+        (app.rawActor.characterName && app.rawActor.characterName.toLowerCase().includes(query)) ||
+        (app.epName && app.epName.toLowerCase().includes(query))
+      );
+      return nameMatch || characterMatch || hasInRoles;
+    });
+
+    return {
+      entries: matchedEntries,
+      actors: matchedActors
+    };
+  }, [entries, allActorsWithAppearances, universalQuery]);
 
   // Synchronize activeId boundaries
   useEffect(() => {
@@ -493,6 +541,22 @@ export default function App() {
           }
           return s;
         });
+        return { ...e, seasons: updatedSeasons };
+      }
+      return e;
+    }));
+  };
+
+  // Delete an entire season and re-index the subsequent season numbers sequentially
+  const handleDeleteSeason = (seasonNumber: number) => {
+    if (!activeEntry) return;
+
+    setEntries(prev => prev.map(e => {
+      if (e.id === activeEntry.id) {
+        const seasons = e.seasons || [];
+        const updatedSeasons = seasons
+          .filter(s => s.seasonNumber !== seasonNumber)
+          .map((s, idx) => ({ ...s, seasonNumber: idx + 1 }));
         return { ...e, seasons: updatedSeasons };
       }
       return e;
@@ -1055,6 +1119,32 @@ export default function App() {
             {isSidebarExpanded && <span className="truncate">Katalog</span>}
           </button>
 
+          {/* Collapsible list of entries inside sidebar under "Katalog" button */}
+          {isSidebarExpanded && entries.length > 0 && (
+            <div className="pl-6 pr-1 py-1 max-h-[220px] overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+              {entries.map(e => {
+                const isSelected = e.id === activeEntry?.id;
+                return (
+                  <button
+                    key={`sidebar-entry-${e.id}`}
+                    onClick={() => {
+                      handleSelectEntry(e.id);
+                      setActiveTab('katalog');
+                      setSelectedActorName(null);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-bold truncate block transition-all ${
+                      isSelected
+                        ? 'text-yellow-400 bg-zinc-950 border border-zinc-855/60'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-850/50'
+                    }`}
+                  >
+                    • {e.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Glumci Tab */}
           <button
             onClick={() => { setActiveTab('glumci'); setSelectedActorName(null); }}
@@ -1223,139 +1313,52 @@ export default function App() {
             ) : (
               <>
                 {/* FILTERS & SEARCH LINE */}
-            <section id="search-filter-controls" className="p-4 rounded-xl border transition-colors bg-zinc-900/30 border-zinc-900">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-            
-            {/* Search input */}
-            <div className="relative flex-1">
-              <span className="absolute inset-y-0 left-3 flex items-center text-zinc-500">
-                <Search size={16} />
-              </span>
-              <input
-                type="text"
-                placeholder="Pretraži filme, serije ili univerzume po nazivu..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                id="search-input-field"
-                className="w-full pl-9 pr-4 py-2 rounded-lg text-sm transition-all focus:outline-none bg-zinc-950/80 border border-zinc-800 text-slate-100 focus:border-yellow-500"
-              />
-            </div>
+                <section id="search-filter-controls" className="p-4 rounded-xl border transition-colors bg-zinc-900/30 border-zinc-900">
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                    
+                    {/* Universal Search trigger button */}
+                    <button
+                      onClick={() => { setIsUniversalSearchOpen(true); setUniversalQuery(''); }}
+                      id="search-input-trigger"
+                      className="relative flex-1 flex items-center text-left pl-10 pr-4 py-2.5 rounded-xl text-xs font-bold bg-zinc-950/80 border border-zinc-850 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 transition cursor-pointer select-none group"
+                    >
+                      <span className="absolute inset-y-0 left-3.5 flex items-center text-zinc-500 group-hover:text-yellow-400 transition-colors">
+                        <Search size={14} />
+                      </span>
+                      <span className="truncate">Pretraži filmove, serije, univerzume ili glumce...</span>
+                      <span className="ml-auto hidden sm:inline-flex items-center gap-1 text-[10px] bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded text-zinc-500 font-mono">
+                        Ctrl + K
+                      </span>
+                    </button>
 
-            {/* Quick Sorters and Choice Row */}
-            <div className="flex flex-wrap items-center gap-3">
-              
-              {/* Sorting Attributes Selector */}
-              <div className="flex items-center gap-1">
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as SortKey)}
-                  id="dropdown-sort-by"
-                  className="px-3 py-2 rounded-l-lg text-xs font-bold uppercase tracking-wider border-y border-l focus:outline-none bg-zinc-950 border-zinc-800 text-zinc-300"
-                >
-                  <option value="rating">🏆 Poredaj po ocjeni</option>
-                  <option value="name">🔤 Poredaj po nazivu</option>
-                  <option value="year">📅 Poredaj po godini</option>
-                </select>
-                <button
-                  onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                  id="btn-toggle-sort-order"
-                  className="p-2 rounded-r-lg border transitionTime bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-900"
-                  title={`Uzlazno vs Silazno (Trenutno: ${sortOrder.toUpperCase()})`}
-                >
-                  <ArrowUpDown size={14} />
-                </button>
-              </div>
-
-            </div>
-          </div>
-        </section>
-
-        {/* SELECTABLE ENTRIES HORIZONTAL SLIDE POSTER LIST */}
-        <section id="selectable-entries-panel" className="relative">
-          <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-widest mb-3 flex items-center justify-between">
-            <span>Kolekcija Biblioteke ({processedEntries.length})</span>
-            {searchQuery && <span className="text-yellow-500">Uključeno pretraživanje</span>}
-          </h3>
-
-          {processedEntries.length === 0 ? (
-            <div className="p-8 text-center rounded-xl border bg-zinc-900/20 border-zinc-900 text-zinc-500">
-              <p className="text-sm font-semibold">Nijedan naslov ne odgovara vašim parametrima pretrage.</p>
-              <button
-                onClick={() => { setSearchQuery(''); setFilterType('all'); }}
-                className="text-xs text-yellow-500 hover:underline mt-2 font-bold focus:outline-none"
-              >
-                Poništi pretragu i filtere
-              </button>
-            </div>
-          ) : (
-            <div className="flex gap-4 overflow-x-auto pb-3 pt-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent snap-x">
-              {processedEntries.map(e => {
-                const isSelected = e.id === activeEntry?.id;
-                const calculatedAvg = calculateAverageRating(e);
-                
-                return (
-                  <button
-                    key={`selection-card-${e.id}`}
-                    onClick={() => handleSelectEntry(e.id)}
-                    id={`entry-selector-btn-${e.id}`}
-                    className={`flex-none w-64 snap-start text-left rounded-xl border overflow-hidden p-3 transition-all duration-300 cursor-pointer ${
-                      isSelected
-                        ? 'bg-zinc-900 border-yellow-400/80 shadow-lg shadow-yellow-500/5 translate-y-[-2px]'
-                        : 'bg-zinc-900/50 border-zinc-900 hover:bg-zinc-900/85 hover:border-zinc-800'
-                    }`}
-                  >
-                    <div className="flex gap-3">
-                      {/* Thumbnail mini-poster */}
-                      <div className="w-14 h-20 bg-zinc-950 rounded-lg overflow-hidden shrink-0 border border-zinc-800/20">
-                        <img
-                          src={e.posterUrl}
-                          alt={e.name}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
+                    {/* Quick Sorters and Choice Row */}
+                    <div className="flex flex-wrap items-center gap-3">
                       
-                      {/* Text details */}
-                      <div className="flex flex-col justify-between overflow-hidden min-h-[5rem]">
-                        <div>
-                          <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                            e.type === 'show' 
-                              ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' 
-                              : e.type === 'universe'
-                                ? 'bg-purple-950/40 text-purple-400 border border-purple-900/30'
-                                : 'bg-sky-950/40 text-sky-400 border border-sky-900/30'
-                          }`}>
-                            {e.type === 'show' ? <Tv size={8} /> : e.type === 'universe' ? <Star size={8} /> : <Film size={8} />}
-                            {e.type === 'show' ? 'Serija' : e.type === 'universe' ? 'Univerzum' : 'Film'}
-                          </span>
-                          
-                          <h4 className={`font-extrabold text-sm tracking-tight mt-1 truncate ${
-                            isSelected ? 'text-yellow-400' : 'text-zinc-100'
-                          }`}>
-                            {e.name}
-                          </h4>
-                        </div>
-
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] text-zinc-500 font-mono font-medium">{e.year}</span>
-                          <span className="text-zinc-600 font-mono text-[10px]">•</span>
-                          {calculatedAvg > 0 ? (
-                            <span className="flex items-center gap-0.5 text-xs font-bold text-yellow-500">
-                              <Star size={11} className="fill-yellow-500 text-yellow-500" />
-                              {calculatedAvg.toFixed(1)}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-zinc-500 italic">Unrated</span>
-                          )}
-                        </div>
+                      {/* Sorting Attributes Selector */}
+                      <div className="flex items-center gap-1">
+                        <select
+                          value={sortBy}
+                          onChange={(e) => setSortBy(e.target.value as SortKey)}
+                          id="dropdown-sort-by"
+                          className="px-3 py-2 rounded-l-lg text-xs font-bold uppercase tracking-wider border-y border-l focus:outline-none bg-zinc-950 border-zinc-800 text-zinc-300"
+                        >
+                          <option value="rating">🏆 Poredaj po ocjeni</option>
+                          <option value="name">🔤 Poredaj po nazivu</option>
+                          <option value="year">📅 Poredaj po godini</option>
+                        </select>
+                        <button
+                          onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                          id="btn-toggle-sort-order"
+                          className="p-2 rounded-r-lg border transitionTime bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-900"
+                          title={`Uzlazno vs Silazno (Trenutno: ${sortOrder.toUpperCase()})`}
+                        >
+                          <ArrowUpDown size={14} />
+                        </button>
                       </div>
+
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                  </div>
+                </section>
 
         {/* ACTIVE ENTRY DETAILED DASHBOARD CARD */}
         {activeEntry && (
@@ -1528,6 +1531,7 @@ export default function App() {
                   onAddSeason={handleAddSeason}
                   onSetSeasonEpisodeCount={handleSetSeasonEpisodeCount}
                   onBulkEdit={() => setIsBulkEditOpen(true)}
+                  onDeleteSeason={handleDeleteSeason}
                 />
               ) : (
                 /* MOVIE SPECIFIC CONTROL BOARD (Single Rating box) */
@@ -1998,6 +2002,87 @@ export default function App() {
             </div>
           </section>
         )}
+
+            {/* SELECTABLE ENTRIES HORIZONTAL SLIDE POSTER LIST (MOVED TO BOTTOM) */}
+            <section id="selectable-entries-panel" className="relative pt-6 border-t border-zinc-900 mt-8">
+              <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-widest mb-4 flex items-center justify-between">
+                <span>Biblioteka Projekata / Brzi Izbornik ({processedEntries.length})</span>
+                <span className="text-zinc-600 text-[10px]">Ostali naslovi u vašoj kolekciji</span>
+              </h3>
+
+              {processedEntries.length === 0 ? (
+                <div className="p-8 text-center rounded-xl border bg-zinc-900/20 border-zinc-900 text-zinc-500">
+                  <p className="text-sm font-semibold">Nijedan naslov ne odgovara vašim parametrima pretrage.</p>
+                </div>
+              ) : (
+                <div className="flex gap-4 overflow-x-auto pb-3 pt-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent snap-x">
+                  {processedEntries.map(e => {
+                    const isSelected = e.id === activeEntry?.id;
+                    const calculatedAvg = calculateAverageRating(e);
+                    
+                    return (
+                      <button
+                        key={`selection-card-${e.id}`}
+                        onClick={() => handleSelectEntry(e.id)}
+                        id={`entry-selector-btn-${e.id}`}
+                        className={`flex-none w-64 snap-start text-left rounded-xl border overflow-hidden p-3 transition-all duration-300 cursor-pointer ${
+                          isSelected
+                            ? 'bg-zinc-900 border-yellow-400/80 shadow-lg shadow-yellow-500/5 translate-y-[-2px]'
+                            : 'bg-zinc-900/50 border-zinc-900 hover:bg-zinc-900/85 hover:border-zinc-800'
+                        }`}
+                      >
+                        <div className="flex gap-3">
+                          {/* Thumbnail mini-poster */}
+                          <div className="w-14 h-20 bg-zinc-950 rounded-lg overflow-hidden shrink-0 border border-zinc-800/20">
+                            <img
+                              src={e.posterUrl}
+                              alt={e.name}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                          
+                          {/* Text details */}
+                          <div className="flex flex-col justify-between overflow-hidden min-h-[5rem]">
+                            <div>
+                              <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                e.type === 'show' 
+                                  ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' 
+                                  : e.type === 'universe'
+                                    ? 'bg-purple-950/40 text-purple-400 border border-purple-900/30'
+                                    : 'bg-sky-950/40 text-sky-400 border border-sky-900/30'
+                              }`}>
+                                {e.type === 'show' ? <Tv size={8} /> : e.type === 'universe' ? <Star size={8} /> : <Film size={8} />}
+                                {e.type === 'show' ? 'Serija' : e.type === 'universe' ? 'Univerzum' : 'Film'}
+                              </span>
+                              
+                              <h4 className={`font-extrabold text-sm tracking-tight mt-1 truncate ${
+                                isSelected ? 'text-yellow-400' : 'text-zinc-100'
+                              }`}>
+                                {e.name}
+                              </h4>
+                            </div>
+
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] text-zinc-500 font-mono font-medium">{e.year}</span>
+                              <span className="text-zinc-600 font-mono text-[10px]">•</span>
+                              {calculatedAvg > 0 ? (
+                                <span className="flex items-center gap-0.5 text-xs font-bold text-yellow-500">
+                                  <Star size={11} className="fill-yellow-500 text-yellow-500" />
+                                  {calculatedAvg.toFixed(1)}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-zinc-500 italic">Unrated</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
               </>
             )}
           </>
@@ -2056,6 +2141,11 @@ export default function App() {
             onSave={handleSaveEpisode}
             onDelete={handleDeleteEpisode}
             allEntriesAvailable={entries}
+            onNavigateToActor={(actorName) => {
+              setActiveTab('glumci');
+              setSelectedActorName(actorName);
+              setSelectedEpisode(null);
+            }}
             onNavigateToEntry={handleNavigateFromActorCatalog}
             onNavigateEpisode={(dir) => handleNavigateEpisode(selectedEpisode.seasonNum, selectedEpisode.episode.id, dir)}
             hasNextEpisode={hasNext}
@@ -2180,6 +2270,146 @@ export default function App() {
             <Check size={14} strokeWidth={3} />
             <span>Sve promjene su uspješno spremljene lokalno!</span>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* UNIVERSAL CENTERED AUTOCOMPLETE SEARCH MODAL */}
+      <AnimatePresence>
+        {isUniversalSearchOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-md" id="universal-search-overlay">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -20 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
+            >
+              {/* Search input header */}
+              <div className="p-4 sm:p-5 border-b border-zinc-800 flex items-center gap-3 relative bg-zinc-900">
+                <Search size={20} className="text-yellow-400 shrink-0" />
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Pretraži filmove, serije, univerzume, glumce, uloge..."
+                  value={universalQuery}
+                  onChange={(e) => setUniversalQuery(e.target.value)}
+                  className="flex-1 bg-transparent text-white placeholder-zinc-500 text-sm sm:text-base font-medium focus:outline-none"
+                />
+                <button
+                  onClick={() => setIsUniversalSearchOpen(false)}
+                  className="text-zinc-400 hover:text-white bg-zinc-800/40 p-1.5 rounded-lg border border-zinc-750 cursor-pointer transition"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Autocomplete Results panel */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 scrollbar-thin scrollbar-thumb-zinc-800">
+                {!universalQuery.trim() ? (
+                  <div className="text-center py-12 px-4 space-y-2">
+                    <Search className="mx-auto text-zinc-600 w-8 h-8 animate-pulse" />
+                    <p className="text-zinc-400 text-xs font-bold uppercase tracking-wider">Univerzalna Pretraga</p>
+                    <p className="text-zinc-500 text-[11px] max-w-xs mx-auto">
+                      Počnite pisati ime glumca, serije, filma ili specifičnog lika. Naša pametna baza prepoznaje sve pojmove i autore.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Catalog entries results */}
+                    {universalSearchResults.entries.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-[10px] font-black uppercase text-yellow-400 tracking-wider flex items-center gap-1">
+                          <Film size={10} /> Naslovi i Projekti ({universalSearchResults.entries.length})
+                        </h4>
+                        <div className="grid grid-cols-1 gap-2">
+                          {universalSearchResults.entries.map(e => (
+                            <button
+                              key={`search-ent-${e.id}`}
+                              onClick={() => {
+                                handleSelectEntry(e.id);
+                                setActiveTab('katalog');
+                                setSelectedActorName(null);
+                                setIsUniversalSearchOpen(false);
+                              }}
+                              className="w-full text-left p-2.5 rounded-xl bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-850/50 hover:border-zinc-800 transition flex items-center gap-3 group"
+                            >
+                              <div className="w-8 h-11 bg-zinc-900 rounded overflow-hidden shrink-0 border border-zinc-850/30">
+                                <img src={e.posterUrl} alt="" className="w-full h-full object-cover" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-zinc-100 group-hover:text-yellow-400 transition-colors truncate">{e.name}</p>
+                                <p className="text-[10px] text-zinc-500 font-mono mt-0.5">{e.year} • {e.type === 'show' ? 'Serija' : e.type === 'universe' ? 'Univerzum' : 'Film'}</p>
+                              </div>
+                              <span className="text-[10px] font-mono text-zinc-600 uppercase font-black shrink-0 group-hover:text-zinc-400 transition-colors">Otvori &rarr;</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actors matching results */}
+                    {universalSearchResults.actors.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-[10px] font-black uppercase text-yellow-400 tracking-wider flex items-center gap-1">
+                          <Users size={10} /> Glumci i Uloge ({universalSearchResults.actors.length})
+                        </h4>
+                        <div className="grid grid-cols-1 gap-2">
+                          {universalSearchResults.actors.map(item => {
+                            const mainRole = item.actor.characterName || 'Nezavisna uloga';
+                            return (
+                              <button
+                                key={`search-act-${item.actor.id}-${item.actor.name}`}
+                                onClick={() => {
+                                  setSelectedActorName(item.actor.name);
+                                  setActiveTab('glumci');
+                                  setIsUniversalSearchOpen(false);
+                                }}
+                                className="w-full text-left p-2.5 rounded-xl bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-850/50 hover:border-zinc-800 transition flex items-center gap-3 group"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-zinc-855 overflow-hidden shrink-0 border border-zinc-800">
+                                  {item.actor.photoUrl ? (
+                                    <img src={item.actor.photoUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-xs font-bold text-zinc-500 bg-zinc-900 uppercase">
+                                      {item.actor.name.charAt(0)}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-zinc-100 group-hover:text-yellow-400 transition-colors truncate">{item.actor.name}</p>
+                                  <p className="text-[10px] text-zinc-500 truncate mt-0.5">Uloge: <span className="text-zinc-400 font-bold">{mainRole}</span></p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-[10px] text-zinc-500 font-mono">Pojavljivanja ({item.appearances.length})</p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No matches */}
+                    {universalSearchResults.entries.length === 0 && universalSearchResults.actors.length === 0 && (
+                      <div className="text-center py-12 text-zinc-500 space-y-1">
+                        <p className="text-sm font-semibold">Nema rezultata za "{universalQuery}"</p>
+                        <p className="text-[10px] text-zinc-600">Pokušajte sa nekim drugim pojmom ili provjerite pravopis.</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Search footer */}
+              <div className="p-3 bg-zinc-950 border-t border-zinc-850 flex items-center justify-between text-[10px] text-zinc-500 font-mono">
+                <span className="flex items-center gap-1.5">
+                  <span className="bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded text-zinc-400 font-bold">ESC</span> zatvori pretragu
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded text-zinc-400 font-bold">&crarr;</span> odaberi stavku
+                </span>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

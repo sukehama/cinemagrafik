@@ -32,8 +32,7 @@ export default function LeaderboardView({
         appearancesCount: item.appearances.length,
         characterNames: Array.from(new Set(item.appearances.map(a => a.rawActor.characterName).filter(Boolean))) as string[]
       }))
-      .sort((a, b) => b.appearancesCount - a.appearancesCount)
-      .slice(0, 10);
+      .sort((a, b) => b.appearancesCount - a.appearancesCount);
   }, [allActorsWithAppearances]);
 
   // 2. Leaderboard for best-rated actors (minimum 1 appearance)
@@ -53,8 +52,7 @@ export default function LeaderboardView({
         };
       })
       .filter(item => item.averageRating > 0)
-      .sort((a, b) => b.averageRating - a.averageRating)
-      .slice(0, 10);
+      .sort((a, b) => b.averageRating - a.averageRating);
   }, [allActorsWithAppearances]);
 
   // 3. Leaderboard for Actor Combos (who appears together most often in episodes/movies)
@@ -114,8 +112,7 @@ export default function LeaderboardView({
     });
 
     return Array.from(comboMap.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
+      .sort((a, b) => b.count - a.count);
   }, [allActorsWithAppearances]);
 
   return (
@@ -146,7 +143,7 @@ export default function LeaderboardView({
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
             {appearancesLeaderboard.length === 0 ? (
               <p className="text-xs text-zinc-650 italic text-center py-6">Nema dovoljno podataka</p>
             ) : (
@@ -199,7 +196,7 @@ export default function LeaderboardView({
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
             {ratingLeaderboard.length === 0 ? (
               <p className="text-xs text-zinc-650 italic text-center py-6">Nema ocijenjenih uloga</p>
             ) : (
@@ -251,7 +248,7 @@ export default function LeaderboardView({
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
             {combosLeaderboard.length === 0 ? (
               <p className="text-xs text-zinc-650 italic text-center py-6">Nema dovoljno uloga za duete</p>
             ) : (

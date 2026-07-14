@@ -180,7 +180,7 @@ export default function ExportModal({ entries, onClose, onImportJSON, initialTab
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinema Grafik — Ahmed (Offline Katalog)</title>
+    <title>Cinema Grafik (Offline Katalog)</title>
     <!-- Tailwind CSS Script -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -262,7 +262,7 @@ export default function ExportModal({ entries, onClose, onImportJSON, initialTab
                     <h1 class="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight font-sans">Cinema Grafik</h1>
                 </div>
                 <p class="text-zinc-500 text-xs sm:text-sm mt-1 mb-0 pb-0">
-                    Made by Ahmed • Interaktivni katalog ocjena, epizoda, glumaca i statistike
+                    Interaktivni katalog ocjena, epizoda, glumaca i statistike
                 </p>
             </div>
             <div class="bg-zinc-900 border border-zinc-800 px-4 py-3 rounded-2xl flex items-center gap-3 shrink-0">
@@ -1068,7 +1068,7 @@ export default function ExportModal({ entries, onClose, onImportJSON, initialTab
             document.getElementById('dashboard-slate').innerHTML = \`
                 <div class="flex flex-col items-center justify-center h-full text-zinc-600 p-8 text-center space-y-2">
                     <p class="font-extrabold text-sm uppercase text-zinc-550">Cinema Grafik</p>
-                    <p class="text-xs">Nema učitanih stavki u katalogu. Ahmed</p>
+                    <p class="text-xs">Nema učitanih stavki u katalogu.</p>
                 </div>
             \`;
         }
@@ -1453,7 +1453,7 @@ export default function ExportModal({ entries, onClose, onImportJSON, initialTab
         {/* Modal footer wrapper */}
         <div className="p-4 bg-zinc-955 border-t border-zinc-805 text-center shrink-0">
           <p className="text-[10px] text-zinc-550 font-bold tracking-widest uppercase font-sans">
-            Cinema Grafik • Ahmed • Samostalnost i Prenosivost
+            Cinema Grafik • Samostalnost i Prenosivost
           </p>
         </div>
 

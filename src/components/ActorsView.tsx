@@ -37,6 +37,8 @@ export default function ActorsView({
   
   // Actor edit form states
   const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editCharacterName, setEditCharacterName] = useState('');
   const [editPhotoUrl, setEditPhotoUrl] = useState('');
   const [editBio, setEditBio] = useState('');
   const [editAge, setEditAge] = useState('');
@@ -54,6 +56,8 @@ export default function ActorsView({
   const startEditing = () => {
     if (!activeActorData) return;
     const { actor } = activeActorData;
+    setEditName(actor.name || '');
+    setEditCharacterName(actor.characterName || '');
     setEditPhotoUrl(actor.photoUrl || '');
     setEditBio(actor.bio || '');
     setEditAge(actor.age ? String(actor.age) : '');
@@ -64,12 +68,20 @@ export default function ActorsView({
   // Handle saving of edit details
   const saveActorDetails = () => {
     if (!selectedActorName) return;
+    const trimmedNewName = editName.trim();
     onUpdateActorGlobalDetails(selectedActorName, {
+      name: trimmedNewName || selectedActorName,
+      characterName: editCharacterName.trim() || undefined,
       photoUrl: editPhotoUrl.trim() || undefined,
       bio: editBio.trim() || undefined,
       age: editAge.trim() ? editAge.trim() : undefined,
       otherInfo: editOtherInfo.trim() || undefined
     });
+
+    if (trimmedNewName && trimmedNewName.toLowerCase() !== selectedActorName.toLowerCase()) {
+      setSelectedActorName(trimmedNewName);
+    }
+
     setIsEditing(false);
   };
 
@@ -263,6 +275,28 @@ export default function ActorsView({
                 {/* Edit Form Fields vs Standard Profile display fields */}
                 {isEditing ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-left">
+                    <div className="space-y-1.5 col-span-1">
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Ime Glumca / Glumice</label>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Ime i prezime..."
+                        className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-yellow-500 font-bold"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 col-span-1">
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Primarni Lik</label>
+                      <input
+                        type="text"
+                        value={editCharacterName}
+                        onChange={(e) => setEditCharacterName(e.target.value)}
+                        placeholder="npr. Batman / Tony Stark..."
+                        className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-yellow-500"
+                      />
+                    </div>
+
                     <div className="space-y-1.5 col-span-1 sm:col-span-2">
                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">URL Slike Glumca</label>
                       <input
@@ -402,7 +436,7 @@ export default function ActorsView({
                               <button
                                 key={`star-${star}`}
                                 onClick={() => onUpdateActorAppearanceRating(
-                                  app.actor.name,
+                                  app.rawActor.name,
                                   app.entryId,
                                   app.seasonNum,
                                   app.epNum,

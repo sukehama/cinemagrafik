@@ -11,6 +11,7 @@ interface DetailPopupProps {
   onSave: (updatedEpisode: Episode) => void;
   onDelete?: () => void;
   allEntriesAvailable: RatingEntry[];
+  onNavigateToActor?: (actorName: string) => void;
   onNavigateToEntry?: (entryId: string, seasonNum?: number, episodeNum?: number) => void;
   onNavigateEpisode?: (direction: 'next' | 'prev') => void;
   hasNextEpisode?: boolean;
@@ -31,6 +32,7 @@ export default function DetailPopup({
   onSave,
   onDelete,
   allEntriesAvailable = [],
+  onNavigateToActor,
   onNavigateToEntry,
   onNavigateEpisode,
   hasNextEpisode = false,
@@ -1218,42 +1220,61 @@ export default function DetailPopup({
 
                 {/* Actor Grid list */}
                 {actors.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {actors.slice(0, 4).map(act => (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {actors.map(act => (
                       <div
                         key={act.id}
-                        className="relative group bg-zinc-950/60 border border-zinc-900 hover:border-emerald-500/20 rounded-xl p-2 flex flex-col items-center text-center space-y-1"
+                        className="relative group bg-zinc-950/60 hover:bg-zinc-950 border border-zinc-900 hover:border-yellow-400/30 rounded-xl p-2 flex flex-col items-center text-center w-[95px] shrink-0 space-y-1 transition"
                       >
-                        <div
-                          onClick={() => setSelectedActor(act)}
-                          className="w-11 h-11 rounded-full overflow-hidden border border-zinc-800 bg-zinc-900 cursor-pointer hover:border-emerald-400 transition"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onNavigateToActor) {
+                              onNavigateToActor(act.name);
+                              onClose();
+                            }
+                          }}
+                          className="w-10 h-10 rounded-full overflow-hidden border border-zinc-800 bg-zinc-900 cursor-pointer hover:border-yellow-400 transition active:scale-90 flex items-center justify-center shrink-0"
+                          title={`Pogledaj profil: ${act.name}`}
                         >
-                          <img
-                            src={act.photoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop'}
-                            alt={act.name}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h5
-                            onClick={() => setSelectedActor(act)}
-                            className="font-bold text-[10px] text-zinc-200 truncate cursor-pointer hover:text-emerald-400"
+                          {act.photoUrl ? (
+                            <img
+                              src={act.photoUrl}
+                              alt={act.name}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-zinc-500 font-black text-[10px] bg-zinc-950 uppercase">
+                              {act.name.charAt(0)}
+                            </div>
+                          )}
+                        </button>
+                        <div className="min-w-0 w-full">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onNavigateToActor) {
+                                onNavigateToActor(act.name);
+                                onClose();
+                              }
+                            }}
+                            className="font-bold text-[9px] text-zinc-200 hover:text-yellow-400 truncate w-full text-center block focus:outline-none"
                           >
                             {act.name}
-                          </h5>
+                          </button>
                           {act.characterName && (
                             <p className="text-[8px] text-zinc-500 truncate italic">
-                              as {act.characterName}
+                              {act.characterName}
                             </p>
                           )}
                         </div>
                         <button
                           type="button"
                           onClick={() => handleDeleteActor(act.id)}
-                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400"
+                          className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-zinc-950 text-zinc-500 hover:text-red-400 border border-zinc-900 rounded-full p-0.5 shadow transition"
                         >
-                          <X size={9} />
+                          <X size={8} />
                         </button>
                       </div>
                     ))}
@@ -1262,17 +1283,6 @@ export default function DetailPopup({
                   <p className="text-[10px] text-zinc-600 italic text-center py-2">
                     Još niste unijeli članove glumačke ekipe za ovu stavku.
                   </p>
-                )}
-
-                {actors.length > 4 && (
-                  <div className="text-right">
-                    <button
-                      onClick={() => setShowAllActorsSubModal(true)}
-                      className="inline-flex items-center gap-1 bg-zinc-900 hover:bg-zinc-855 px-2.5 py-1 rounded border border-emerald-900 text-[9px] text-emerald-400 font-bold"
-                    >
-                      Prikaži kompletnu ekipu ({actors.length}) <ChevronRight size={10} />
-                    </button>
-                  </div>
                 )}
               </div>
 
