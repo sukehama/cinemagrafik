@@ -42,7 +42,8 @@ import {
   Users,
   Trophy,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Home
 } from 'lucide-react';
 
 export default function App() {
@@ -100,11 +101,23 @@ export default function App() {
   const [universalQuery, setUniversalQuery] = useState('');
 
   // Main Tab Navigation & Sidebar collapsible state
-  const [activeTab, setActiveTab] = useState<'katalog' | 'glumci' | 'leaderboard'>('katalog');
+  const [activeTab, setActiveTab] = useState<'home' | 'katalog' | 'glumci' | 'leaderboard'>('home');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
     const saved = localStorage.getItem('cinema-sidebar-expanded');
     return saved !== 'false';
   });
+  const [isCatalogListExpanded, setIsCatalogListExpanded] = useState(() => {
+    const saved = localStorage.getItem('is-catalog-list-expanded');
+    return saved !== 'false';
+  });
+
+  const toggleCatalogList = () => {
+    setIsCatalogListExpanded(prev => {
+      const newVal = !prev;
+      localStorage.setItem('is-catalog-list-expanded', String(newVal));
+      return newVal;
+    });
+  };
   // Active detailed actor profile state
   const [selectedActorName, setSelectedActorName] = useState<string | null>(null);
 
@@ -241,6 +254,12 @@ export default function App() {
     if (!activeEntry) return null;
     return getShowDynamicColors(activeEntry.name);
   }, [activeEntry]);
+
+  // Find the highest rated entry in the database
+  const highestRatedEntry = useMemo(() => {
+    if (entries.length === 0) return null;
+    return [...entries].sort((a, b) => calculateAverageRating(b) - calculateAverageRating(a))[0];
+  }, [entries]);
 
   // Get unique existing actors across all media along with all of their appearances/roles
   const allActorsWithAppearances = useMemo(() => {
@@ -1106,44 +1125,71 @@ export default function App() {
 
         {/* Sidebar Items */}
         <nav className="flex-1 p-3.5 space-y-2 select-none">
-          {/* Katalog Tab */}
+          {/* Glavni Meni Tab */}
           <button
-            onClick={() => { setActiveTab('katalog'); setSelectedActorName(null); }}
+            onClick={() => { setActiveTab('home'); setSelectedActorName(null); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
-              activeTab === 'katalog'
+              activeTab === 'home'
                 ? 'bg-yellow-400 text-zinc-950 font-black shadow-lg shadow-yellow-500/10'
-                : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-100'
+                : 'text-zinc-400 hover:bg-zinc-855 hover:text-zinc-100'
             }`}
           >
-            <Film size={16} className="shrink-0 animate-pulse" />
-            {isSidebarExpanded && <span className="truncate">Katalog</span>}
+            <Home size={16} className="shrink-0" />
+            {isSidebarExpanded && <span className="truncate">Glavni Meni</span>}
           </button>
 
-          {/* Collapsible list of entries inside sidebar under "Katalog" button */}
-          {isSidebarExpanded && entries.length > 0 && (
-            <div className="pl-6 pr-1 py-1 max-h-[220px] overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-              {entries.map(e => {
-                const isSelected = e.id === activeEntry?.id;
-                return (
-                  <button
-                    key={`sidebar-entry-${e.id}`}
-                    onClick={() => {
-                      handleSelectEntry(e.id);
-                      setActiveTab('katalog');
-                      setSelectedActorName(null);
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-bold truncate block transition-all ${
-                      isSelected
-                        ? 'text-yellow-400 bg-zinc-950 border border-zinc-855/60'
-                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-850/50'
-                    }`}
-                  >
-                    • {e.name}
-                  </button>
-                );
-              })}
+          {/* Katalog Tab & Collapsible items */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => { setActiveTab('katalog'); setSelectedActorName(null); }}
+                className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
+                  activeTab === 'katalog'
+                    ? 'bg-yellow-400 text-zinc-950 font-black shadow-lg shadow-yellow-500/10'
+                    : 'text-zinc-400 hover:bg-zinc-855 hover:text-zinc-100'
+                }`}
+              >
+                <Film size={16} className="shrink-0" />
+                {isSidebarExpanded && <span className="truncate">Katalog</span>}
+              </button>
+              {isSidebarExpanded && entries.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleCatalogList}
+                  className="p-2 text-zinc-500 hover:text-zinc-205 rounded-lg hover:bg-zinc-850/50 cursor-pointer transition shrink-0"
+                  title={isCatalogListExpanded ? "Sakrij listu kataloga" : "Prikaži listu kataloga"}
+                >
+                  <ChevronDown size={14} className={`transform transition-transform duration-200 ${isCatalogListExpanded ? 'rotate-180' : ''}`} />
+                </button>
+              )}
             </div>
-          )}
+
+            {/* Collapsible list of entries inside sidebar under "Katalog" button */}
+            {isSidebarExpanded && isCatalogListExpanded && entries.length > 0 && (
+              <div className="pl-6 pr-1 py-1 max-h-[220px] overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+                {entries.map(e => {
+                  const isSelected = e.id === activeEntry?.id && activeTab === 'katalog';
+                  return (
+                    <button
+                      key={`sidebar-entry-${e.id}`}
+                      onClick={() => {
+                        handleSelectEntry(e.id);
+                        setActiveTab('katalog');
+                        setSelectedActorName(null);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-bold truncate block transition-all ${
+                        isSelected
+                          ? 'text-yellow-400 bg-zinc-950 border border-zinc-855/60'
+                          : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-850/50'
+                      }`}
+                    >
+                      • {e.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Glumci Tab */}
           <button
@@ -1151,7 +1197,7 @@ export default function App() {
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
               activeTab === 'glumci'
                 ? 'bg-yellow-400 text-zinc-955 font-black shadow-lg shadow-yellow-500/10'
-                : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-100'
+                : 'text-zinc-400 hover:bg-zinc-855 hover:text-zinc-100'
             }`}
           >
             <Users size={16} className="shrink-0" />
@@ -1164,7 +1210,7 @@ export default function App() {
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
               activeTab === 'leaderboard'
                 ? 'bg-yellow-404 bg-yellow-400 text-zinc-955 font-black shadow-lg shadow-yellow-500/10'
-                : 'text-zinc-450 hover:bg-zinc-850 hover:text-zinc-100'
+                : 'text-zinc-450 hover:bg-zinc-855 hover:text-zinc-100'
             }`}
           >
             <Trophy size={16} className="shrink-0" />
@@ -1289,7 +1335,229 @@ export default function App() {
           </div>
         ) : (
           <>
-            {activeTab === 'glumci' ? (
+            {activeTab === 'home' ? (
+              <div className="space-y-8 animate-fade-in" id="glavni-meni-view">
+                {/* WELCOME BANNER */}
+                <div className="relative p-6 sm:p-8 rounded-3xl overflow-hidden border border-zinc-900 bg-zinc-950 shadow-2xl">
+                  {/* Subtle decorative mesh background */}
+                  <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]" />
+                  <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="space-y-2 text-center md:text-left">
+                      <div className="inline-flex items-center gap-2 bg-yellow-400/10 text-yellow-400 px-3 py-1 rounded-full border border-yellow-400/20 text-[10px] font-black uppercase tracking-widest">
+                        <Sparkles size={11} className="animate-spin-slow" /> Cinema Grafik v2.0
+                      </div>
+                      <h2 className="text-2xl sm:text-3.5xl font-black text-white tracking-tight">
+                        Dobrodošli u Vaš Cinema Grafik!
+                      </h2>
+                      <p className="text-zinc-400 text-xs sm:text-sm max-w-2xl leading-relaxed">
+                        Dobrodošli u centralnu bazu i vizualni katalog za ocjenjivanje vaših omiljenih filmova, serija i franšiza. Kreirajte detaljne grafikone ocjena, upravljajte glumačkim postavama, pratite trendove i izvezite svoje kataloge u samostalni HTML format!
+                      </p>
+                    </div>
+                    <div className="shrink-0 flex flex-col sm:flex-row gap-3">
+                      <button
+                        onClick={() => setIsAddModalOpen(true)}
+                        className="flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-zinc-950 font-black px-5 py-3 rounded-xl text-xs tracking-wider uppercase shadow-lg shadow-yellow-500/10 active:scale-95 transition-all cursor-pointer animate-pulse"
+                      >
+                        <Plus size={14} /> Dodaj Novi Naslov
+                      </button>
+                      <button
+                        onClick={() => setIsSurpriseOpen(true)}
+                        className="flex items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-850 text-purple-405 border border-purple-500/35 px-5 py-3 rounded-xl text-xs font-black tracking-wider uppercase active:scale-95 transition-all cursor-pointer"
+                      >
+                        <Sparkles size={14} /> Iznenadi Me!
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* STATISTICS BENTO GRID */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Stats Card: Movies */}
+                  <div className="bg-zinc-950 p-5 rounded-2xl border border-zinc-900 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500">Igrani Filmovi</span>
+                      <Film size={14} className="text-sky-400" />
+                    </div>
+                    <p className="text-2xl sm:text-3.5xl font-black text-white font-mono leading-none">
+                      {entries.filter(e => e.type === 'movie').length}
+                    </p>
+                    <p className="text-[9px] text-zinc-650 font-bold uppercase">U bazi podataka</p>
+                  </div>
+
+                  {/* Stats Card: TV Shows */}
+                  <div className="bg-zinc-950 p-5 rounded-2xl border border-zinc-900 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500">TV Serije</span>
+                      <Tv size={14} className="text-emerald-400" />
+                    </div>
+                    <p className="text-2xl sm:text-3.5xl font-black text-white font-mono leading-none">
+                      {entries.filter(e => e.type === 'show').length}
+                    </p>
+                    <p className="text-[9px] text-zinc-650 font-bold uppercase">Detaljne sezone</p>
+                  </div>
+
+                  {/* Stats Card: Universes */}
+                  <div className="bg-zinc-950 p-5 rounded-2xl border border-zinc-900 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500">Univerzumi</span>
+                      <Star size={14} className="text-purple-400" />
+                    </div>
+                    <p className="text-2xl sm:text-3.5xl font-black text-white font-mono leading-none">
+                      {entries.filter(e => e.type === 'universe').length}
+                    </p>
+                    <p className="text-[9px] text-zinc-650 font-bold uppercase">Multifazni projekti</p>
+                  </div>
+
+                  {/* Stats Card: Highest Rated */}
+                  <div className="bg-zinc-950 p-5 rounded-2xl border border-zinc-900 space-y-1 flex flex-col justify-between min-h-[110px]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500">Najbolji Naslov</span>
+                      <Trophy size={14} className="text-yellow-400" />
+                    </div>
+                    {highestRatedEntry ? (
+                      <div>
+                        <p className="text-xs font-black text-yellow-400 truncate leading-tight">
+                          {highestRatedEntry.name}
+                        </p>
+                        <p className="text-[10px] text-zinc-400 font-bold mt-1 flex items-center gap-1">
+                          ★ {calculateAverageRating(highestRatedEntry).toFixed(1)}/10
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-650 italic">Nema naslova</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* NAVIGATION SHORTCUTS */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <button
+                    onClick={() => setActiveTab('leaderboard')}
+                    className="p-4 rounded-2xl bg-zinc-900/30 hover:bg-zinc-900/60 border border-zinc-900 text-left transition-all active:scale-98 cursor-pointer flex items-center gap-4 group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-yellow-400/10 flex items-center justify-center text-yellow-400 group-hover:bg-yellow-400/20 transition-all shrink-0">
+                      <Trophy size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black uppercase text-zinc-200 tracking-wider">Otvorite Rang Liste</h4>
+                      <p className="text-[10px] text-zinc-500 truncate mt-0.5">Glumačke postave i top performanse</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('glumci')}
+                    className="p-4 rounded-2xl bg-zinc-900/30 hover:bg-zinc-900/60 border border-zinc-900 text-left transition-all active:scale-98 cursor-pointer flex items-center gap-4 group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-purple-400/10 flex items-center justify-center text-purple-400 group-hover:bg-purple-400/20 transition-all shrink-0">
+                      <Users size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black uppercase text-zinc-200 tracking-wider">Centralna Baza Glumaca</h4>
+                      <p className="text-[10px] text-zinc-500 truncate mt-0.5">Biografije, galerije i uloge u projektima</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setExportInitialTab('json-backup');
+                      setIsExportModalOpen(true);
+                    }}
+                    className="p-4 rounded-2xl bg-zinc-900/30 hover:bg-zinc-900/60 border border-zinc-900 text-left transition-all active:scale-98 cursor-pointer flex items-center gap-4 group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-400/10 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-400/20 transition-all shrink-0">
+                      <Database size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black uppercase text-zinc-200 tracking-wider">Upravljanje JSON Bazom</h4>
+                      <p className="text-[10px] text-zinc-500 truncate mt-0.5">Kreirajte sigurnosne kopije ili uvezite podatke</p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* THE VISUAL DIRECTORY / KATALOG */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Film size={16} className="text-yellow-400" />
+                      <h3 className="font-extrabold text-base text-zinc-100 uppercase tracking-wide">
+                        Vaš Katalog Naslova ({entries.length})
+                      </h3>
+                    </div>
+                    <span className="text-[10px] text-zinc-500 font-mono font-bold uppercase tracking-wider">Kliknite za otvaranje detaljnog grafikona</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                    {entries.map(e => {
+                      const avgRating = calculateAverageRating(e);
+                      return (
+                        <div
+                          key={`home-dir-${e.id}`}
+                          onClick={() => {
+                            handleSelectEntry(e.id);
+                            setActiveTab('katalog');
+                            setSelectedActorName(null);
+                          }}
+                          className="bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-yellow-400/35 rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] active:scale-98 group cursor-pointer shadow-lg flex flex-col h-full"
+                        >
+                          {/* Poster thumbnail container */}
+                          <div className="relative aspect-[2/3] w-full bg-zinc-900 overflow-hidden shrink-0">
+                            <img
+                              src={e.posterUrl}
+                              alt={e.name}
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              referrerPolicy="no-referrer"
+                            />
+                            {/* Overlay category badge */}
+                            <span className={`absolute top-3 left-3 px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider ${
+                              e.type === 'show' 
+                                ? 'bg-emerald-950/95 text-emerald-400 border border-emerald-900/50' 
+                                : e.type === 'universe'
+                                  ? 'bg-purple-950/95 text-purple-400 border border-purple-900/50'
+                                  : 'bg-sky-950/95 text-sky-400 border border-sky-900/50'
+                            }`}>
+                              {e.type === 'show' ? 'Serija' : e.type === 'universe' ? 'Univerzum' : 'Film'}
+                            </span>
+
+                            {/* Average rating star badge */}
+                            <div className="absolute bottom-3 right-3 bg-zinc-950/90 border border-zinc-850 px-2 py-1 rounded-lg flex items-center gap-1 text-[10px] font-black text-yellow-400 font-mono shadow-md">
+                              <Star size={10} className="fill-current" />
+                              <span>{avgRating > 0 ? avgRating.toFixed(1) : '—'}</span>
+                            </div>
+                          </div>
+
+                          {/* Info section */}
+                          <div className="p-4 flex flex-col justify-between flex-1 space-y-2">
+                            <div>
+                              <p className="text-[10px] font-mono font-bold text-zinc-500">{e.year}</p>
+                              <h4 className="font-extrabold text-xs sm:text-sm text-zinc-100 group-hover:text-yellow-400 transition-colors tracking-tight line-clamp-1 mt-0.5">
+                                {e.name}
+                              </h4>
+                              <p className="text-[10px] text-zinc-400 line-clamp-2 mt-1 leading-relaxed">
+                                {e.description}
+                              </p>
+                            </div>
+                            
+                            <div className="pt-2 border-t border-zinc-900/50 flex items-center justify-between text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                              <span>
+                                {e.type === 'show' 
+                                  ? `${e.seasons?.length || 0} Sezona` 
+                                  : e.type === 'universe'
+                                    ? `${e.seasons?.length || 0} Faza`
+                                    : 'Igrani film'
+                                }
+                              </span>
+                              <span className="text-yellow-400 group-hover:translate-x-1 transition-transform duration-200">
+                                Otvori →
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : activeTab === 'glumci' ? (
               <ActorsView
                 entries={entries}
                 allActorsWithAppearances={allActorsWithAppearances}
