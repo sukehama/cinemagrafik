@@ -12,13 +12,14 @@ import StatsModal from './components/StatsModal';
 import ExportModal from './components/ExportModal';
 import SurpriseMeModal from './components/SurpriseMeModal';
 import BulkEditModal from './components/BulkEditModal';
+import ActorsView from './components/ActorsView';
+import LeaderboardView from './components/LeaderboardView';
 import { 
   Tv, 
   Film, 
   Plus, 
   Search, 
-  Sun, 
-  Moon, 
+  User, 
   Star, 
   RotateCcw, 
   Trash2, 
@@ -35,7 +36,11 @@ import {
   Sparkles,
   Save,
   Check,
-  Database
+  Database,
+  Users,
+  Trophy,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 export default function App() {
@@ -88,6 +93,15 @@ export default function App() {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [selectedEpisode, setSelectedEpisode] = useState<{ seasonNum: number; episode: Episode } | null>(null);
 
+  // Main Tab Navigation & Sidebar collapsible state
+  const [activeTab, setActiveTab] = useState<'katalog' | 'glumci' | 'leaderboard'>('katalog');
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
+    const saved = localStorage.getItem('cinema-sidebar-expanded');
+    return saved !== 'false';
+  });
+  // Active detailed actor profile state
+  const [selectedActorName, setSelectedActorName] = useState<string | null>(null);
+
   // Custom dialog & edit interaction boundaries
   const [deleteTarget, setDeleteTarget] = useState<'all' | 'entry' | null>(null);
   const [isMovieRatingEditing, setIsMovieRatingEditing] = useState(false);
@@ -95,6 +109,18 @@ export default function App() {
   const [voterNameInput, setVoterNameInput] = useState('');
   const [voterRatingInput, setVoterRatingInput] = useState(8.0);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Movie actors creation and search states
+  const [isAddingMovieActor, setIsAddingMovieActor] = useState(false);
+  const [movieActorSearchQuery, setMovieActorSearchQuery] = useState('');
+  const [newMovieActorName, setNewMovieActorName] = useState('');
+  const [newMovieActorCharacter, setNewMovieActorCharacter] = useState('');
+  const [newMovieActorRating, setNewMovieActorRating] = useState(8.0);
+  const [newMovieActorPhoto, setNewMovieActorPhoto] = useState('');
+  const [newMovieActorBio, setNewMovieActorBio] = useState('');
+  const [newMovieActorAge, setNewMovieActorAge] = useState('');
+  const [newMovieActorOtherInfo, setNewMovieActorOtherInfo] = useState('');
+  const [movieActorAutofillMsg, setMovieActorAutofillMsg] = useState('');
   
   // 1. Asynchronously load from standard IndexedDB on mount & perform migration if IndexedDB is currently empty
   useEffect(() => {
@@ -186,6 +212,50 @@ export default function App() {
     return getShowDynamicColors(activeEntry.name);
   }, [activeEntry]);
 
+  // Get unique existing actors across all media along with all of their appearances/roles
+  const allActorsWithAppearances = useMemo(() => {
+    const map = new Map<string, { actor: Actor; appearances: { entryId: string; entryName: string; type: 'show' | 'movie' | 'universe'; seasonNum?: number; epNum?: number; epName?: string; rawActor: Actor }[] }>();
+    
+    entries.forEach(entry => {
+      if (entry.type === 'movie') {
+        (entry.movieActors || []).forEach(act => {
+          const key = act.name.trim().toLowerCase();
+          if (!map.has(key)) {
+            map.set(key, { actor: act, appearances: [] });
+          }
+          map.get(key)!.appearances.push({
+            entryId: entry.id,
+            entryName: entry.name,
+            type: 'movie',
+            rawActor: act
+          });
+        });
+      } else {
+        (entry.seasons || []).forEach(s => {
+          (s.episodes || []).forEach(ep => {
+            (ep.actors || []).forEach(act => {
+              const key = act.name.trim().toLowerCase();
+              if (!map.has(key)) {
+                map.set(key, { actor: act, appearances: [] });
+              }
+              map.get(key)!.appearances.push({
+                entryId: entry.id,
+                entryName: entry.name,
+                type: entry.type as 'show' | 'universe',
+                seasonNum: s.seasonNumber,
+                epNum: ep.episodeNumber,
+                epName: ep.name,
+                rawActor: act
+              });
+            });
+          });
+        });
+      }
+    });
+    
+    return Array.from(map.values()).sort((a, b) => a.actor.name.localeCompare(b.actor.name));
+  }, [entries]);
+
   // Synchronize activeId boundaries
   useEffect(() => {
     if (activeEntry && activeId !== activeEntry.id) {
@@ -195,16 +265,53 @@ export default function App() {
     }
     setIsMovieRatingEditing(false);
     setTempMovieRating(null);
+    setIsAddingMovieActor(false);
+    setMovieActorSearchQuery('');
+    setNewMovieActorName('');
+    setNewMovieActorCharacter('');
+    setNewMovieActorRating(8.0);
+    setNewMovieActorPhoto('');
+    setNewMovieActorBio('');
+    setNewMovieActorAge('');
+    setNewMovieActorOtherInfo('');
+    setMovieActorAutofillMsg('');
   }, [activeEntry, activeId]);
 
   // Sort and filter calculations
   const processedEntries = useMemo(() => {
     let list = [...entries];
 
-    // Text filtration
+    // Global Text filtration (matches entry name, description, season name, episode name, or actor/role name)
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      list = list.filter(e => e.name.toLowerCase().includes(query) || e.description.toLowerCase().includes(query));
+      const query = searchQuery.toLowerCase().trim();
+      list = list.filter(e => {
+        if (e.name.toLowerCase().includes(query) || e.description.toLowerCase().includes(query)) {
+          return true;
+        }
+        if (e.type === 'movie' && e.movieActors) {
+          if (e.movieActors.some(act => act.name.toLowerCase().includes(query) || (act.characterName && act.characterName.toLowerCase().includes(query)))) {
+            return true;
+          }
+        }
+        if (e.seasons) {
+          const matchedInSeason = e.seasons.some(s => {
+            if (s.seasonName && s.seasonName.toLowerCase().includes(query)) {
+              return true;
+            }
+            return s.episodes.some(ep => {
+              if (ep.name.toLowerCase().includes(query) || (ep.overview && ep.overview.toLowerCase().includes(query))) {
+                return true;
+              }
+              if (ep.actors && ep.actors.some(act => act.name.toLowerCase().includes(query) || (act.characterName && act.characterName.toLowerCase().includes(query)))) {
+                return true;
+              }
+              return false;
+            });
+          });
+          if (matchedInSeason) return true;
+        }
+        return false;
+      });
     }
 
     // Type filter
@@ -683,6 +790,77 @@ export default function App() {
     }
   };
 
+  // Update an actor's performance rating in a specific role (movie, or specific episode of a show)
+  const handleUpdateActorAppearanceRating = (actorName: string, entryId: string, seasonNum: number | undefined, epNum: number | undefined, rating: number) => {
+    setEntries(prev => prev.map(entry => {
+      if (entry.id === entryId) {
+        if (entry.type === 'movie') {
+          const updatedActors = (entry.movieActors || []).map(act => {
+            if (act.name.trim().toLowerCase() === actorName.trim().toLowerCase()) {
+              return { ...act, performanceRating: rating };
+            }
+            return act;
+          });
+          return { ...entry, movieActors: updatedActors };
+        } else {
+          const updatedSeasons = (entry.seasons || []).map(s => {
+            if (s.seasonNumber === seasonNum) {
+              const updatedEpisodes = s.episodes.map(ep => {
+                if (ep.episodeNumber === epNum) {
+                  const updatedActors = (ep.actors || []).map(act => {
+                    if (act.name.trim().toLowerCase() === actorName.trim().toLowerCase()) {
+                      return { ...act, performanceRating: rating };
+                    }
+                    return act;
+                  });
+                  return { ...ep, actors: updatedActors };
+                }
+                return ep;
+              });
+              return { ...s, episodes: updatedEpisodes };
+            }
+            return s;
+          });
+          return { ...entry, seasons: updatedSeasons };
+        }
+      }
+      return entry;
+    }));
+  };
+
+  // Update global details of an actor (photo, bio, age, trivia) and synchronize them across all appearances
+  const handleUpdateActorGlobalDetails = (actorName: string, fields: Partial<Actor>) => {
+    setEntries(prev => prev.map(entry => {
+      let movieActors = entry.movieActors;
+      if (entry.movieActors) {
+        movieActors = entry.movieActors.map(act => {
+          if (act.name.trim().toLowerCase() === actorName.trim().toLowerCase()) {
+            return { ...act, ...fields };
+          }
+          return act;
+        });
+      }
+      
+      let seasons = entry.seasons;
+      if (entry.seasons) {
+        seasons = entry.seasons.map(s => {
+          const episodes = s.episodes.map(ep => {
+            const actors = (ep.actors || []).map(act => {
+              if (act.name.trim().toLowerCase() === actorName.trim().toLowerCase()) {
+                return { ...act, ...fields };
+              }
+              return act;
+            });
+            return { ...ep, actors };
+          });
+          return { ...s, episodes };
+        });
+      }
+      
+      return { ...entry, movieActors, seasons };
+    }));
+  };
+
   // Movie specific changes (quick rate overall)
   const handleUpdateMovieRating = (newRating: number) => {
     if (!activeEntry || activeEntry.type !== 'movie') return;
@@ -692,6 +870,76 @@ export default function App() {
       }
       return e;
     }));
+  };
+
+  // Update movie actors
+  const handleUpdateMovieActors = (entryId: string, updatedActors: Actor[]) => {
+    setEntries(prev => prev.map(e => {
+      if (e.id === entryId) {
+        return { ...e, movieActors: updatedActors };
+      }
+      return e;
+    }));
+  };
+
+  const handleMovieActorNameChange = (val: string) => {
+    setNewMovieActorName(val);
+    if (!val.trim()) {
+      setMovieActorAutofillMsg('');
+      return;
+    }
+    const match = allActorsWithAppearances.find(item => item.actor.name.trim().toLowerCase() === val.trim().toLowerCase())?.actor;
+    if (match) {
+      setNewMovieActorPhoto(match.photoUrl || '');
+      setNewMovieActorBio(match.bio || '');
+      setNewMovieActorAge(match.age ? String(match.age) : '');
+      setNewMovieActorOtherInfo(match.otherInfo || '');
+      setMovieActorAutofillMsg(`Pronađen glumac/ica "${match.name}" – podaci su automatski povučeni! 👥`);
+    } else {
+      setMovieActorAutofillMsg('');
+    }
+  };
+
+  const handleAddMovieActorSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeEntry || activeEntry.type !== 'movie') return;
+    if (!newMovieActorName.trim()) return alert('Molimo unesite ime glumca!');
+
+    const existingMovieActors = activeEntry.movieActors || [];
+    if (existingMovieActors.some(act => act.name.trim().toLowerCase() === newMovieActorName.trim().toLowerCase())) {
+      return alert('Ovaj glumac je već dodan u ovaj film!');
+    }
+
+    const newActor: Actor = {
+      id: `act-${Date.now()}-${Math.random().toString().slice(-4)}`,
+      name: newMovieActorName.trim(),
+      characterName: newMovieActorCharacter.trim() || undefined,
+      performanceRating: Number(newMovieActorRating),
+      photoUrl: newMovieActorPhoto.trim() || undefined,
+      bio: newMovieActorBio.trim() || undefined,
+      age: newMovieActorAge.trim() || undefined,
+      otherInfo: newMovieActorOtherInfo.trim() || undefined
+    };
+
+    const updatedActors = [...existingMovieActors, newActor];
+    handleUpdateMovieActors(activeEntry.id, updatedActors);
+
+    setNewMovieActorName('');
+    setNewMovieActorCharacter('');
+    setNewMovieActorRating(8.0);
+    setNewMovieActorPhoto('');
+    setNewMovieActorBio('');
+    setNewMovieActorAge('');
+    setNewMovieActorOtherInfo('');
+    setMovieActorAutofillMsg('');
+    setIsAddingMovieActor(false);
+  };
+
+  const handleDeleteMovieActor = (actorId: string) => {
+    if (!activeEntry || activeEntry.type !== 'movie') return;
+    const existingMovieActors = activeEntry.movieActors || [];
+    const updatedActors = existingMovieActors.filter(act => act.id !== actorId);
+    handleUpdateMovieActors(activeEntry.id, updatedActors);
   };
 
   // Save edited characteristics of show/movie
@@ -735,23 +983,98 @@ export default function App() {
   };
 
   return (
-    <div id="rating-app-root" className={`min-h-screen transition-all duration-300 ${isDarkMode ? 'bg-zinc-950 text-slate-100' : 'bg-slate-50 text-zinc-900'}`}>
+    <div id="rating-app-root" className="min-h-screen transition-all duration-300 bg-zinc-950 text-slate-100 flex flex-col md:flex-row">
       
-      {/* HEADER BAR */}
-      <header id="app-navbar" className={`sticky top-0 z-40 px-4 sm:px-6 py-4 shadow-md backdrop-blur-md border-b transition-colors ${isDarkMode ? 'bg-zinc-950/90 border-zinc-900' : 'bg-white/95 border-zinc-200'}`}>
+      {/* SIDEBAR NAVIGATION */}
+      <aside 
+        className="bg-zinc-900 border-r border-zinc-850 flex flex-col transition-all duration-300 shrink-0 w-64 md:w-64 relative z-40"
+        style={{ width: isSidebarExpanded ? '16rem' : '5rem' }}
+      >
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-zinc-850 flex items-center justify-between">
+          <div className="flex items-center gap-2 overflow-hidden select-none">
+            <span className="bg-yellow-400 text-zinc-950 font-black px-2 py-0.5 rounded text-[11px] shrink-0 font-sans tracking-tight uppercase">
+              Cinema
+            </span>
+            {isSidebarExpanded && (
+              <span className="font-sans font-extrabold text-[13px] tracking-tight uppercase text-zinc-100 truncate animate-fade-in">
+                Grafik
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              const nextState = !isSidebarExpanded;
+              setIsSidebarExpanded(nextState);
+              localStorage.setItem('cinema-sidebar-expanded', String(nextState));
+            }}
+            className="text-zinc-400 hover:text-white bg-zinc-950/40 p-1.5 rounded-lg border border-zinc-800 cursor-pointer active:scale-95 transition"
+            title={isSidebarExpanded ? "Sakrij meni" : "Prikaži meni"}
+          >
+            {isSidebarExpanded ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+          </button>
+        </div>
+
+        {/* Sidebar Items */}
+        <nav className="flex-1 p-3.5 space-y-2 select-none">
+          {/* Katalog Tab */}
+          <button
+            onClick={() => { setActiveTab('katalog'); setSelectedActorName(null); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
+              activeTab === 'katalog'
+                ? 'bg-yellow-400 text-zinc-950 font-black shadow-lg shadow-yellow-500/10'
+                : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-100'
+            }`}
+          >
+            <Film size={16} className="shrink-0 animate-pulse" />
+            {isSidebarExpanded && <span className="truncate">Katalog</span>}
+          </button>
+
+          {/* Glumci Tab */}
+          <button
+            onClick={() => { setActiveTab('glumci'); setSelectedActorName(null); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
+              activeTab === 'glumci'
+                ? 'bg-yellow-400 text-zinc-955 font-black shadow-lg shadow-yellow-500/10'
+                : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-100'
+            }`}
+          >
+            <Users size={16} className="shrink-0" />
+            {isSidebarExpanded && <span className="truncate">Baza Glumaca</span>}
+          </button>
+
+          {/* Leaderboard Tab */}
+          <button
+            onClick={() => { setActiveTab('leaderboard'); setSelectedActorName(null); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
+              activeTab === 'leaderboard'
+                ? 'bg-yellow-404 bg-yellow-400 text-zinc-955 font-black shadow-lg shadow-yellow-500/10'
+                : 'text-zinc-450 hover:bg-zinc-850 hover:text-zinc-100'
+            }`}
+          >
+            <Trophy size={16} className="shrink-0" />
+            {isSidebarExpanded && <span className="truncate">Rang Liste</span>}
+          </button>
+        </nav>
+
+        {/* Sidebar Footer */}
+        {isSidebarExpanded && (
+          <div className="p-4 border-t border-zinc-850 text-[10px] text-zinc-600 font-mono text-center select-none animate-fade-in">
+            v2.0 • Online Sync
+          </div>
+        )}
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 min-w-0 flex flex-col bg-zinc-955">
+        
+        {/* HEADER BAR */}
+        <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-6 py-4 shadow-md backdrop-blur-md border-b transition-colors bg-zinc-950/90 border-zinc-900">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           
           <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-            <div className="flex items-center gap-2">
-              <span className="bg-yellow-400 text-zinc-950 font-black px-2.5 py-1 rounded text-sm tracking-tighter uppercase font-sans">
-                Cinema
-              </span>
-              <span className="font-sans font-extrabold text-lg tracking-tight uppercase tracking-wider text-zinc-100 dark:text-zinc-100">
-                Grafik
-              </span>
-            </div>
-            <span className="text-[10px] text-zinc-500 font-bold border-l border-zinc-800/80 pl-3 hidden sm:inline uppercase tracking-widest font-mono">
-              Izradio Ahmed
+            <span className="text-zinc-400 font-extrabold text-sm uppercase tracking-widest font-sans">
+              Katalog Ocjena
             </span>
           </div>
 
@@ -831,14 +1154,12 @@ export default function App() {
       <main id="app-main-view" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8 pb-16">
         
         {entries.length === 0 ? (
-          <div className={`p-16 text-center border-2 border-dashed rounded-3xl max-w-2xl mx-auto flex flex-col items-center justify-center space-y-4 transition-all ${
-            isDarkMode ? 'bg-zinc-900/10 border-zinc-800/80' : 'bg-white border-slate-200 shadow-sm'
-          }`} id="empty-workspace-state">
+          <div className="p-16 text-center border-2 border-dashed rounded-3xl max-w-2xl mx-auto flex flex-col items-center justify-center space-y-4 transition-all bg-zinc-900/10 border-zinc-800/80" id="empty-workspace-state">
             <div className="w-16 h-16 rounded-2xl bg-yellow-400/10 flex items-center justify-center text-yellow-400 mb-2">
               <Film className="w-8 h-8" />
             </div>
-            <h3 className={`text-xl font-black uppercase tracking-tight ${isDarkMode ? 'text-zinc-200' : 'text-zinc-900'}`}>
-              Cinema Grafik — Ahmed
+            <h3 className="text-xl font-black uppercase tracking-tight text-zinc-200">
+              Cinema Grafik
             </h3>
             <p className="text-zinc-500 text-xs sm:text-sm max-w-sm leading-relaxed">
               Dobrodošli u Cinema Grafik! Vaša lična baza ocjena je prazna. Započnite kreiranjem nove TV serije, filma ili Cinematic Universuma za praćenje i vizualizaciju. Svi podaci se čuvaju u memoriji vašeg pretraživača.
@@ -853,8 +1174,31 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* FILTERS & SEARCH LINE */}
-            <section id="search-filter-controls" className={`p-4 rounded-xl border transition-colors ${isDarkMode ? 'bg-zinc-900/30 border-zinc-900' : 'bg-white border-zinc-200 shadow-sm'}`}>
+            {activeTab === 'glumci' ? (
+              <ActorsView
+                entries={entries}
+                allActorsWithAppearances={allActorsWithAppearances}
+                selectedActorName={selectedActorName}
+                setSelectedActorName={setSelectedActorName}
+                onNavigateToEntry={(entryId, seasonNum, epNum) => {
+                  handleNavigateFromActorCatalog(entryId, seasonNum, epNum);
+                  setActiveTab('katalog');
+                }}
+                onUpdateActorGlobalDetails={handleUpdateActorGlobalDetails}
+                onUpdateActorAppearanceRating={handleUpdateActorAppearanceRating}
+              />
+            ) : activeTab === 'leaderboard' ? (
+              <LeaderboardView
+                allActorsWithAppearances={allActorsWithAppearances}
+                onNavigateToActor={(actorName) => {
+                  setSelectedActorName(actorName);
+                  setActiveTab('glumci');
+                }}
+              />
+            ) : (
+              <>
+                {/* FILTERS & SEARCH LINE */}
+            <section id="search-filter-controls" className="p-4 rounded-xl border transition-colors bg-zinc-900/30 border-zinc-900">
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
             
             {/* Search input */}
@@ -868,45 +1212,20 @@ export default function App() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 id="search-input-field"
-                className={`w-full pl-9 pr-4 py-2 rounded-lg text-sm transition-all focus:outline-none ${
-                  isDarkMode 
-                    ? 'bg-zinc-950/80 border border-zinc-800 text-slate-100 focus:border-yellow-500' 
-                    : 'bg-slate-100 border border-slate-200 text-slate-900 focus:border-yellow-600 focus:bg-white'
-                }`}
+                className="w-full pl-9 pr-4 py-2 rounded-lg text-sm transition-all focus:outline-none bg-zinc-950/80 border border-zinc-800 text-slate-100 focus:border-yellow-500"
               />
             </div>
 
             {/* Quick Sorters and Choice Row */}
             <div className="flex flex-wrap items-center gap-3">
               
-              {/* Type Category Filter */}
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value as 'all' | 'show' | 'movie' | 'universe')}
-                id="dropdown-type-filter"
-                className={`px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border focus:outline-none ${
-                  isDarkMode 
-                    ? 'bg-zinc-950 border-zinc-805 text-zinc-300' 
-                    : 'bg-white border-slate-200 text-zinc-700'
-                }`}
-              >
-                <option value="all">🍿 Svi Formati</option>
-                <option value="show">📺 Samo Serije</option>
-                <option value="movie">🎬 Samo Filmovi</option>
-                <option value="universe">🌌 Cinematic Universe</option>
-              </select>
-
               {/* Sorting Attributes Selector */}
               <div className="flex items-center gap-1">
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SortKey)}
                   id="dropdown-sort-by"
-                  className={`px-3 py-2 rounded-l-lg text-xs font-bold uppercase tracking-wider border-y border-l focus:outline-none ${
-                    isDarkMode 
-                      ? 'bg-zinc-950 border-zinc-808 text-zinc-300' 
-                      : 'bg-white border-slate-200 text-zinc-700'
-                  }`}
+                  className="px-3 py-2 rounded-l-lg text-xs font-bold uppercase tracking-wider border-y border-l focus:outline-none bg-zinc-950 border-zinc-800 text-zinc-300"
                 >
                   <option value="rating">🏆 Poredaj po ocjeni</option>
                   <option value="name">🔤 Poredaj po nazivu</option>
@@ -915,11 +1234,7 @@ export default function App() {
                 <button
                   onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
                   id="btn-toggle-sort-order"
-                  className={`p-2 rounded-r-lg border transitionTime ${
-                    isDarkMode 
-                      ? 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-900' 
-                      : 'bg-white border-slate-200 text-zinc-700 hover:bg-slate-50'
-                  }`}
+                  className="p-2 rounded-r-lg border transitionTime bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-900"
                   title={`Uzlazno vs Silazno (Trenutno: ${sortOrder.toUpperCase()})`}
                 >
                   <ArrowUpDown size={14} />
@@ -938,7 +1253,7 @@ export default function App() {
           </h3>
 
           {processedEntries.length === 0 ? (
-            <div className={`p-8 text-center rounded-xl border ${isDarkMode ? 'bg-zinc-900/20 border-zinc-900 text-zinc-500' : 'bg-white border-zinc-100 text-zinc-400'}`}>
+            <div className="p-8 text-center rounded-xl border bg-zinc-900/20 border-zinc-900 text-zinc-500">
               <p className="text-sm font-semibold">Nijedan naslov ne odgovara vašim parametrima pretrage.</p>
               <button
                 onClick={() => { setSearchQuery(''); setFilterType('all'); }}
@@ -960,12 +1275,8 @@ export default function App() {
                     id={`entry-selector-btn-${e.id}`}
                     className={`flex-none w-64 snap-start text-left rounded-xl border overflow-hidden p-3 transition-all duration-300 cursor-pointer ${
                       isSelected
-                        ? isDarkMode
-                          ? 'bg-zinc-900 border-yellow-400/80 shadow-lg shadow-yellow-500/5 translate-y-[-2px]'
-                          : 'bg-white border-yellow-500 shadow-md shadow-slate-200 translate-y-[-2px]'
-                        : isDarkMode
-                          ? 'bg-zinc-900/50 border-zinc-900 hover:bg-zinc-900/85 hover:border-zinc-800'
-                          : 'bg-white border-zinc-200 hover:bg-slate-50'
+                        ? 'bg-zinc-900 border-yellow-400/80 shadow-lg shadow-yellow-500/5 translate-y-[-2px]'
+                        : 'bg-zinc-900/50 border-zinc-900 hover:bg-zinc-900/85 hover:border-zinc-800'
                     }`}
                   >
                     <div className="flex gap-3">
@@ -994,7 +1305,7 @@ export default function App() {
                           </span>
                           
                           <h4 className={`font-extrabold text-sm tracking-tight mt-1 truncate ${
-                            isSelected ? 'text-yellow-400' : isDarkMode ? 'text-zinc-100' : 'text-zinc-950'
+                            isSelected ? 'text-yellow-400' : 'text-zinc-100'
                           }`}>
                             {e.name}
                           </h4>
@@ -1026,11 +1337,7 @@ export default function App() {
           <section id="active-entry-presentation-dashboard" className="space-y-6">
             
             {/* Cinematic banner card background */}
-            <div className={`relative rounded-3xl overflow-hidden border transition-all duration-500 ${
-              isDarkMode 
-                ? `bg-zinc-950 border-zinc-900 ${activeTheme?.glowShadow || 'shadow-[0_0_50px_-12px_rgba(255,255,255,0.05)]'}` 
-                : 'bg-white border-zinc-200 shadow-md'
-            }`}>
+            <div className={`relative rounded-3xl overflow-hidden border transition-all duration-500 bg-zinc-950 border-zinc-900 ${activeTheme?.glowShadow || 'shadow-[0_0_50px_-12px_rgba(255,255,255,0.05)]'}`}>
               
               {/* Widescreen Cinema Banner (completely visible on all viewports, including Android) */}
               <div className="relative h-44 sm:h-60 md:h-72 w-full overflow-hidden select-none bg-zinc-950">
@@ -1042,11 +1349,7 @@ export default function App() {
                 />
                 
                 {/* Cinema grading overlay vignette details */}
-                <div className={`absolute inset-0 bg-gradient-to-t ${
-                  isDarkMode 
-                    ? 'from-zinc-950 via-zinc-950/40 to-transparent' 
-                    : 'from-white via-white/40 to-transparent'
-                }`} />
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
 
                 {/* Tinted dynamic brand stripe representing our active color scheme */}
                 <div className="absolute bottom-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-yellow-505/85 to-transparent" style={{ backgroundImage: `linear-gradient(to right, transparent, ${activeTheme?.accentColor || '#f59e0b'}, transparent)` }} />
@@ -1056,9 +1359,7 @@ export default function App() {
               <div className="relative p-6 sm:p-8 flex flex-col md:flex-row gap-6 sm:gap-8 pt-4 md:pt-6">
                 
                 {/* Interactive Big Poster Overlay (floats beautifully over banner) */}
-                <div className={`-mt-20 sm:-mt-28 md:-mt-32 w-40 sm:w-48 aspect-[2/3] bg-zinc-950 rounded-2xl overflow-hidden shadow-2xl shrink-0 self-center md:self-start z-10 border-4 ${
-                  isDarkMode ? 'border-zinc-955' : 'border-white'
-                }`} style={{ borderColor: isDarkMode ? (activeTheme?.accentColor ? `${activeTheme.accentColor}40` : '#18181b') : '#ffffff' }}>
+                <div className="-mt-20 sm:-mt-28 md:-mt-32 w-40 sm:w-48 aspect-[2/3] bg-zinc-950 rounded-2xl overflow-hidden shadow-2xl shrink-0 self-center md:self-start z-10 border-4" style={{ borderColor: activeTheme?.accentColor ? `${activeTheme.accentColor}40` : '#18181b' }}>
                   <img
                     src={activeEntry.posterUrl}
                     alt={activeEntry.name}
@@ -1084,7 +1385,7 @@ export default function App() {
                           {activeEntry.type === 'show' ? <Tv size={10} /> : activeEntry.type === 'universe' ? <Star size={10} /> : <Film size={10} />}
                           {activeEntry.type === 'show' ? 'Serijski program' : activeEntry.type === 'universe' ? 'Cinematic Universe' : 'Igrani film'}
                         </span>
-                        <span className={`text-[11px] font-mono font-bold ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                        <span className="text-[11px] font-mono font-bold text-zinc-400">
                           {activeEntry.year}
                         </span>
                       </div>
@@ -1106,11 +1407,7 @@ export default function App() {
                         <button
                           onClick={() => setIsEditModalOpen(true)}
                           id="btn-edit-active-attributes"
-                          className={`flex items-center gap-1 text-xs font-bold hover:bg-yellow-500/10 border px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-                            isDarkMode 
-                              ? 'text-zinc-300 bg-zinc-900 border-zinc-850 hover:text-yellow-400 hover:border-yellow-400/30' 
-                              : 'text-zinc-700 bg-white border-zinc-200 hover:text-yellow-600 hover:border-yellow-500/30 shadow-sm'
-                          }`}
+                          className="flex items-center gap-1 text-xs font-bold hover:bg-yellow-500/10 border px-2.5 py-1.5 rounded-lg transition-all cursor-pointer text-zinc-300 bg-zinc-900 border-zinc-850 hover:text-yellow-400 hover:border-yellow-400/30"
                           title="Uredi naslov, opis i slike"
                         >
                           <Edit size={13} /> Uredi Detalje
@@ -1129,9 +1426,7 @@ export default function App() {
                     </div>
 
                     {/* Show Name */}
-                    <h1 className={`text-3xl sm:text-4.5xl font-black tracking-tight ${
-                      isDarkMode ? 'text-white' : 'text-zinc-900'
-                    }`}>
+                    <h1 className="text-3xl sm:text-4.5xl font-black tracking-tight text-white">
                       {activeEntry.name}
                     </h1>
 
@@ -1143,7 +1438,7 @@ export default function App() {
                         <Star className="text-yellow-400 fill-yellow-400" size={24} />
                         <div>
                           <div className="flex items-baseline gap-1">
-                            <span className={`text-2xl font-black ${isDarkMode ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                            <span className="text-2xl font-black text-zinc-100">
                               {calculateAverageRating(activeEntry) > 0 ? calculateAverageRating(activeEntry).toFixed(1) : '—'}
                             </span>
                             <span className="text-xs text-zinc-500 font-medium">/10</span>
@@ -1164,11 +1459,11 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className={`w-px h-8 hidden sm:block ${isDarkMode ? 'bg-zinc-800' : 'bg-zinc-200'}`} />
+                      <div className="w-px h-8 hidden sm:block bg-zinc-800" />
 
                       {/* Overall votes summary calculated */}
                       <div>
-                        <span className={`text-sm font-extrabold block ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                        <span className="text-sm font-extrabold block text-zinc-300">
                           {calculateTotalVotes(activeEntry).toLocaleString()} glasova
                         </span>
                         <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-extrabold">Popularnost</span>
@@ -1176,9 +1471,9 @@ export default function App() {
 
                       {activeEntry.movieDuration && (
                         <>
-                          <div className={`w-px h-8 hidden sm:block ${isDarkMode ? 'bg-zinc-800' : 'bg-zinc-200'}`} />
+                          <div className="w-px h-8 hidden sm:block bg-zinc-800" />
                           <div>
-                            <span className={`text-sm font-extrabold block flex items-center gap-1 ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                            <span className="text-sm font-extrabold block flex items-center gap-1 text-zinc-300">
                               <Clock size={12} /> {activeEntry.movieDuration}
                             </span>
                             <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-extrabold">Trajanje fima</span>
@@ -1188,7 +1483,7 @@ export default function App() {
                     </div>
 
                     {/* Brief description */}
-                    <p className={`text-sm leading-relaxed max-w-2xl ${isDarkMode ? 'text-zinc-400' : 'text-zinc-650'}`}>
+                    <p className="text-sm leading-relaxed max-w-2xl text-zinc-400">
                       {activeEntry.description}
                     </p>
                   </div>
@@ -1222,17 +1517,17 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <GridIcon className="text-yellow-400" size={18} />
                         <h3 className="font-extrabold text-sm uppercase tracking-wide text-zinc-400">
-                          Single Rating Configuration
+                          Konfiguracija Ocjene Filma
                         </h3>
                       </div>
 
                       <div className="bg-zinc-950/40 border border-zinc-900 p-5 rounded-xl space-y-4">
                         <div className="flex justify-between items-center bg-zinc-950/80 px-4 py-2 rounded-lg">
-                          <span className="text-xs uppercase font-extrabold text-zinc-500">Selected Rating:</span>
+                          <span className="text-xs uppercase font-extrabold text-zinc-500">Odabrana Ocjena:</span>
                           <span className="text-yellow-400 font-mono font-black text-sm sm:text-base">
                             {(() => {
                               const score = isMovieRatingEditing ? (tempMovieRating ?? activeEntry.movieRating ?? 8.0) : (activeEntry.movieRating ?? 0.0);
-                              return score === 0 ? '0.0 (Upcoming / Unrated)' : `${score.toFixed(1)}/10`;
+                              return score === 0 ? '0.0 (Uskoro / Neocijenjeno)' : `${score.toFixed(1)}/10`;
                             })()}
                           </span>
                         </div>
@@ -1251,9 +1546,9 @@ export default function App() {
                                 id="movie-main-rating-slider"
                               />
                               <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
-                                <span>0.0 (Upcoming)</span>
-                                <span>5.0 (Average)</span>
-                                <span>10.0 (Cinema)</span>
+                                <span>0.0 (Uskoro)</span>
+                                <span>5.0 (Prosječno)</span>
+                                <span>10.0 (Savršenstvo)</span>
                               </div>
                             </div>
                             <div className="flex gap-2.5">
@@ -1264,7 +1559,7 @@ export default function App() {
                                 }}
                                 className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-350 text-xs font-bold py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
                               >
-                                Cancel
+                                Otkaži
                               </button>
                               <button
                                 onClick={() => {
@@ -1275,23 +1570,23 @@ export default function App() {
                                 }}
                                 className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-zinc-950 text-xs font-black py-1.5 rounded-lg transition-colors uppercase tracking-wider cursor-pointer shadow-md"
                               >
-                                Confirm
+                                Potvrdi
                               </button>
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-4 text-center">
                             <div className="py-2">
-                              <p className="text-zinc-500 text-xs italic">Rating locked to avoid accidental adjustments.</p>
+                              <p className="text-zinc-500 text-xs italic">Ocjena je zaključana kako bi se izbjegle slučajne promjene.</p>
                             </div>
                             <button
                               onClick={() => {
-                                setTempMovieRating(activeEntry.movieRating ?? 8.0);
-                                setIsMovieRatingEditing(true);
+                                  setTempMovieRating(activeEntry.movieRating ?? 8.0);
+                                  setIsMovieRatingEditing(true);
                               }}
                               className="w-full bg-yellow-400 hover:bg-yellow-500 text-zinc-950 font-black py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-sm"
                             >
-                              ★ Rate Movie
+                              ★ Ocijeni Film
                             </button>
                           </div>
                         )}
@@ -1300,7 +1595,7 @@ export default function App() {
                       <div className="bg-yellow-400/5 p-4 rounded-xl border border-yellow-400/10 flex gap-3 text-xs leading-relaxed text-zinc-400">
                         <Info size={18} className="text-yellow-400 shrink-0 mt-0.5" />
                         <p>
-                          Unlike dynamic series shows, single feature movies do not require multi-season episode tables. Toggle the slider overall metric to score your cinematic response instantly!
+                          Za razliku od dinamičnih TV serija, samostalni filmovi ne zahtijevaju tabele epizoda po sezonama. Pomjerite klizač iznad kako biste odmah ocijenili svoje filmsko iskustvo!
                         </p>
                       </div>
                     </div>
@@ -1334,10 +1629,230 @@ export default function App() {
                 </div>
               )}
 
+              {/* MOVIE CAST (GLUMCI U FILMU) SECTION */}
+              {activeEntry.type === 'movie' && (
+                <div className="mt-8 p-6 sm:p-8 rounded-2xl border border-zinc-900 bg-zinc-900/40 text-zinc-100 space-y-6" id="movie-cast-panel">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4 mb-4">
+                    <div>
+                      <h3 className="font-extrabold text-base flex items-center gap-2">
+                        <Users className="text-yellow-400" size={18} />
+                        Glumačka Postava Filma
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Upravljajte glumcima, ulogama i njihovim ocjenama performansi u ovom filmu.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setIsAddingMovieActor(!isAddingMovieActor)}
+                      className="flex items-center gap-1 text-xs font-black bg-yellow-400 hover:bg-yellow-500 text-zinc-950 px-3 py-1.5 rounded-lg active:scale-95 transition-all cursor-pointer font-sans uppercase tracking-wider"
+                    >
+                      <Plus size={14} /> {isAddingMovieActor ? 'Zatvori' : 'Dodaj Glumca'}
+                    </button>
+                  </div>
+
+                  {isAddingMovieActor && (
+                    <form 
+                      onSubmit={handleAddMovieActorSubmit}
+                      className="bg-zinc-950 p-5 rounded-xl border border-zinc-850 space-y-4 max-w-xl"
+                    >
+                      <h4 className="text-xs font-extrabold uppercase tracking-widest text-zinc-400">
+                        Novi Glumac u Filmu
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">
+                            Ime i Prezime Glumca *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={newMovieActorName}
+                            onChange={(e) => handleMovieActorNameChange(e.target.value)}
+                            placeholder="npr. Robert Downey Jr."
+                            className="w-full bg-zinc-900 border border-zinc-800 focus:border-yellow-400 rounded-lg px-3 py-2 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none"
+                          />
+                          {movieActorAutofillMsg && (
+                            <p className="text-[10px] text-emerald-400 font-bold mt-1 animate-pulse">
+                              {movieActorAutofillMsg}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">
+                            Uloga (Ime lika u filmu)
+                          </label>
+                          <input
+                            type="text"
+                            value={newMovieActorCharacter}
+                            onChange={(e) => setNewMovieActorCharacter(e.target.value)}
+                            placeholder="npr. Tony Stark / Iron Man"
+                            className="w-full bg-zinc-900 border border-zinc-800 focus:border-yellow-400 rounded-lg px-3 py-2 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 flex justify-between">
+                            <span>Ocjena Performanse:</span>
+                            <span className="text-yellow-400 font-mono font-bold">
+                              {newMovieActorRating.toFixed(1)}/10
+                            </span>
+                          </label>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="range"
+                              min="1.0"
+                              max="10.0"
+                              step="0.1"
+                              value={newMovieActorRating}
+                              onChange={(e) => setNewMovieActorRating(Number(e.target.value))}
+                              className="flex-1 accent-yellow-400 cursor-pointer h-1 bg-zinc-800 rounded-lg appearance-none"
+                            />
+                            <span className="text-xs font-mono font-black text-yellow-400 shrink-0 w-8 text-right">
+                              {newMovieActorRating.toFixed(1)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">
+                            Godine glumca (Opcionalno)
+                          </label>
+                          <input
+                            type="text"
+                            value={newMovieActorAge}
+                            onChange={(e) => setNewMovieActorAge(e.target.value)}
+                            placeholder="npr. 58"
+                            className="w-full bg-zinc-900 border border-zinc-800 focus:border-yellow-400 rounded-lg px-3 py-2 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4">
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">
+                            Link Slike Profila (Opcionalno)
+                          </label>
+                          <input
+                            type="text"
+                            value={newMovieActorPhoto}
+                            onChange={(e) => setNewMovieActorPhoto(e.target.value)}
+                            placeholder="https://..."
+                            className="w-full bg-zinc-900 border border-zinc-800 focus:border-yellow-400 rounded-lg px-3 py-2 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">
+                            Biografija / Bilješke (Opcionalno)
+                          </label>
+                          <textarea
+                            value={newMovieActorBio}
+                            onChange={(e) => setNewMovieActorBio(e.target.value)}
+                            placeholder="Kratki detalji o performansu..."
+                            rows={2}
+                            className="w-full bg-zinc-900 border border-zinc-800 focus:border-yellow-400 rounded-lg px-3 py-2 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none resize-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2.5 pt-2">
+                        <button
+                          type="submit"
+                          className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-zinc-950 text-xs font-black py-2 rounded-xl transition-colors uppercase tracking-wider cursor-pointer shadow-md"
+                        >
+                          Dodaj Glumca u film
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingMovieActor(false);
+                            setNewMovieActorName('');
+                            setNewMovieActorCharacter('');
+                            setNewMovieActorRating(8.0);
+                            setNewMovieActorPhoto('');
+                            setNewMovieActorBio('');
+                            setNewMovieActorAge('');
+                            setNewMovieActorOtherInfo('');
+                            setMovieActorAutofillMsg('');
+                          }}
+                          className="bg-zinc-800 hover:bg-zinc-700 text-zinc-350 text-xs font-bold py-2 px-4 rounded-xl cursor-pointer"
+                        >
+                          Otkaži
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Render Movie Actors List */}
+                  {activeEntry.movieActors && activeEntry.movieActors.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                      {activeEntry.movieActors.map((actor) => (
+                        <div 
+                          key={actor.id}
+                          className="bg-zinc-950/80 p-3.5 rounded-xl border border-zinc-900 flex items-start justify-between gap-3 group hover:bg-zinc-950 transition animate-fade-in"
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-800 overflow-hidden shrink-0 flex items-center justify-center">
+                              {actor.photoUrl ? (
+                                <img
+                                  src={actor.photoUrl}
+                                  alt={actor.name}
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <User size={20} className="text-zinc-600" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-extrabold text-[12px] text-zinc-100 tracking-tight leading-tight">
+                                {actor.name}
+                              </h4>
+                              {actor.characterName && (
+                                <p className="text-[10px] text-zinc-400 font-bold mt-0.5 truncate leading-tight">
+                                  uloga: {actor.characterName}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${getRatingColorClass(actor.performanceRating || 8.0)}`}>
+                                  ★ {(actor.performanceRating || 8.0).toFixed(1)}
+                                </span>
+                                {actor.age && (
+                                  <span className="text-[9px] text-zinc-500 font-mono">
+                                    • {actor.age} god.
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleDeleteMovieActor(actor.id)}
+                            className="text-zinc-600 hover:text-red-400 p-1 shrink-0 rounded hover:bg-red-500/10 transition cursor-pointer"
+                            title="Ukloni glumca iz filma"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-8 bg-zinc-950/15 border border-dashed border-zinc-850 rounded-xl text-center">
+                      <p className="text-xs text-zinc-500">Nema unesenih glumaca za ovaj film.</p>
+                      <p className="text-[10px] text-zinc-600 mt-1 max-w-sm">
+                        Kliknite na "Dodaj Glumca" iznad kako biste dodali uloge i ocijenili performanse glumačke postave u ovom filmu!
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* CO-VOTERS & EXTERNAL REVIEWS PANEL */}
-              <div className={`mt-8 p-6 sm:p-8 rounded-2xl border transition-colors ${
-                isDarkMode ? 'bg-zinc-900/40 border-zinc-900 text-zinc-100' : 'bg-white border-zinc-200 text-zinc-950 shadow-sm'
-              }`} id="integrated-co-voters-panel">
+              <div className="mt-8 p-6 sm:p-8 rounded-2xl border transition-colors bg-zinc-900/40 border-zinc-900 text-zinc-100" id="integrated-co-voters-panel">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-805 pb-4 mb-6 animate-fade-in">
                   <div>
                     <h3 className="font-extrabold text-base flex items-center gap-2">
@@ -1458,6 +1973,8 @@ export default function App() {
             </div>
           </section>
         )}
+              </>
+            )}
           </>
         )}
       </main>
@@ -1641,6 +2158,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}
     </div>
   );
 }

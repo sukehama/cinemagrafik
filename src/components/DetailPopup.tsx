@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Episode, Actor, GuestReview, RatingEntry } from '../types';
+import { Episode, Actor, GuestReview, RatingEntry, FeaturedMoment } from '../types';
 import { getYoutubeEmbedUrl, getRatingColorClass } from '../utils';
-import { X, Youtube, Save, Trash2, Edit2, Play, Star, Upload, Plus, Users, MessageSquare, Film, Tv, ChevronRight, ChevronLeft, Check } from 'lucide-react';
+import { X, Youtube, Save, Trash2, Edit2, Play, Star, Upload, Plus, Users, MessageSquare, Film, Tv, ChevronRight, ChevronLeft, Check, Video, Clock } from 'lucide-react';
 
 interface DetailPopupProps {
   episode: Episode;
@@ -73,6 +73,14 @@ export default function DetailPopup({
   const [selectedActorsMap, setSelectedActorsMap] = useState<{[actorId: string]: { actor: Actor; characterName: string }}>({});
   const [activeActorTab, setActiveActorTab] = useState<'search' | 'new'>('search');
 
+  // Featured Moments states
+  const [featuredMoments, setFeaturedMoments] = useState<FeaturedMoment[]>(episode.featuredMoments || []);
+  const [isAddingMoment, setIsAddingMoment] = useState(false);
+  const [newMomentTitle, setNewMomentTitle] = useState('');
+  const [newMomentStart, setNewMomentStart] = useState('');
+  const [newMomentEnd, setNewMomentEnd] = useState('');
+  const [newMomentNotes, setNewMomentNotes] = useState('');
+
   // Synchronize internal state when the active episode is changed via Next/Prev navigation
   useEffect(() => {
     setName(episode.name);
@@ -84,10 +92,16 @@ export default function DetailPopup({
     setLinkTargetId(episode.linkTargetId || '');
     setGuestReviews(episode.guestReviews || []);
     setActors(episode.actors || []);
+    setFeaturedMoments(episode.featuredMoments || []);
     setIsEditing(false);
     setShowTrailer(false);
     setIsAddingReview(false);
     setIsAddingActor(false);
+    setIsAddingMoment(false);
+    setNewMomentTitle('');
+    setNewMomentStart('');
+    setNewMomentEnd('');
+    setNewMomentNotes('');
     setActorSearchQuery('');
     setSelectedActorsMap({});
     setActiveActorTab('search');
@@ -123,7 +137,7 @@ export default function DetailPopup({
   };
 
   const handleAddSelectedActorsDone = () => {
-    const selectedList = Object.values(selectedActorsMap);
+    const selectedList = Object.values(selectedActorsMap) as { actor: Actor; characterName: string }[];
     if (selectedList.length === 0) {
       setIsAddingActor(false);
       return;
@@ -337,6 +351,7 @@ export default function DetailPopup({
     setOverview(episode.overview || '');
     setGuestReviews(episode.guestReviews || []);
     setActors(episode.actors || []);
+    setFeaturedMoments(episode.featuredMoments || []);
     setLinkText(episode.linkText || '');
     setLinkTargetId(episode.linkTargetId || '');
     setIsEditing(false);
@@ -344,6 +359,7 @@ export default function DetailPopup({
     setShowDeleteConfirm(false);
     setIsAddingReview(false);
     setIsAddingActor(false);
+    setIsAddingMoment(false);
     setIsEditingSelectedActor(false);
   }, [episode]);
 
@@ -357,10 +373,66 @@ export default function DetailPopup({
       overview: overview || undefined,
       guestReviews,
       actors,
+      featuredMoments,
       linkText: linkText || undefined,
       linkTargetId: linkTargetId || undefined
     });
     setIsEditing(false);
+  };
+
+  const handleAddMomentSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMomentTitle.trim()) return alert('Molimo unesite naziv istaknutog momenta!');
+
+    const newMoment = {
+      id: `mom-${Date.now()}-${Math.random().toString().slice(-4)}`,
+      title: newMomentTitle.trim(),
+      startTime: newMomentStart.trim() || '00:00',
+      endTime: newMomentEnd.trim() || '00:00',
+      notes: newMomentNotes.trim() || undefined
+    };
+
+    const updatedMoments = [...featuredMoments, newMoment];
+    setFeaturedMoments(updatedMoments);
+
+    onSave({
+      ...episode,
+      name,
+      rating: Number(rating),
+      imageUrl: imageUrl || undefined,
+      youtubeUrl: youtubeUrl || undefined,
+      overview: overview || undefined,
+      guestReviews,
+      actors,
+      featuredMoments: updatedMoments,
+      linkText: linkText || undefined,
+      linkTargetId: linkTargetId || undefined
+    });
+
+    setNewMomentTitle('');
+    setNewMomentStart('');
+    setNewMomentEnd('');
+    setNewMomentNotes('');
+    setIsAddingMoment(false);
+  };
+
+  const handleDeleteMoment = (momentId: string) => {
+    const updatedMoments = featuredMoments.filter(m => m.id !== momentId);
+    setFeaturedMoments(updatedMoments);
+
+    onSave({
+      ...episode,
+      name,
+      rating: Number(rating),
+      imageUrl: imageUrl || undefined,
+      youtubeUrl: youtubeUrl || undefined,
+      overview: overview || undefined,
+      guestReviews,
+      actors,
+      featuredMoments: updatedMoments,
+      linkText: linkText || undefined,
+      linkTargetId: linkTargetId || undefined
+    });
   };
 
   const handleAddReviewSubmit = (e: React.FormEvent) => {
@@ -1364,6 +1436,134 @@ export default function DetailPopup({
                 ) : (
                   <p className="text-[10px] text-zinc-600 italic text-center py-2">
                     Nema unesenih recenzija za ovu stavku.
+                  </p>
+                )}
+              </div>
+
+              {/* FEATURED MOMENTS (ISTAKNUTI MOMENTI) MODULE */}
+              <div className="bg-zinc-950/40 border border-zinc-850 p-4 rounded-xl space-y-3">
+                <div className="flex justify-between items-center border-b border-zinc-850/60 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Video size={14} className="text-pink-400" />
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-zinc-200">
+                      Istaknuti momenti / Isječci ({featuredMoments.length})
+                    </h4>
+                  </div>
+                  <button
+                    onClick={() => setIsAddingMoment(!isAddingMoment)}
+                    className="text-[9px] font-black uppercase text-pink-400 hover:text-pink-350 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus size={10} /> {isAddingMoment ? 'Zatvori' : 'Dodaj moment'}
+                  </button>
+                </div>
+
+                {isAddingMoment && (
+                  <form onSubmit={handleAddMomentSubmit} className="space-y-3 bg-zinc-950 p-3.5 rounded-xl border border-zinc-850">
+                    <h5 className="text-[9px] font-bold text-zinc-400 uppercase">Dodaj istaknuti isječak</h5>
+
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Naziv / Opis momenta *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newMomentTitle}
+                          onChange={(e) => setNewMomentTitle(e.target.value)}
+                          placeholder="npr. Walter White 'I am the one who knocks!'"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-pink-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Početno Vrijeme (Timestamp)</label>
+                          <input
+                            type="text"
+                            value={newMomentStart}
+                            onChange={(e) => setNewMomentStart(e.target.value)}
+                            placeholder="npr. 01:22:30 ili 15:40"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Krajnje Vrijeme (Timestamp)</label>
+                          <input
+                            type="text"
+                            value={newMomentEnd}
+                            onChange={(e) => setNewMomentEnd(e.target.value)}
+                            placeholder="npr. 01:23:15 ili 16:10"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-0.5">Dodatna bilješka / Komentar (Opcionalno)</label>
+                        <textarea
+                          value={newMomentNotes}
+                          onChange={(e) => setNewMomentNotes(e.target.value)}
+                          placeholder="npr. Nevjerovatna glumačka ekspresija..."
+                          rows={2}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none resize-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        className="flex-1 bg-pink-500 hover:bg-pink-600 text-white font-black text-[10px] uppercase py-2 rounded-lg cursor-pointer transition"
+                      >
+                        Potvrdi i dodaj
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingMoment(false)}
+                        className="bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-[10px] px-3 py-2 rounded-lg cursor-pointer"
+                      >
+                        Otkaži
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Moments output list */}
+                {featuredMoments.length > 0 ? (
+                  <div className="space-y-2">
+                    {featuredMoments.map(mom => (
+                      <div key={mom.id} className="bg-zinc-950/80 p-3 rounded-xl border border-zinc-900 flex items-start justify-between gap-3 hover:bg-zinc-950 transition">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-pink-500/10 flex items-center justify-center text-pink-400 shrink-0">
+                            <Clock size={12} />
+                          </div>
+                          <div className="min-w-0">
+                            <h5 className="font-extrabold text-[11px] text-zinc-200 tracking-tight">{mom.title}</h5>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-[9px] font-mono font-bold text-pink-400 bg-pink-500/5 px-1.5 py-0.5 rounded border border-pink-550/10 shrink-0">
+                                {mom.startTime} - {mom.endTime}
+                              </span>
+                              {mom.notes && (
+                                <span className="text-[10px] text-zinc-500 truncate italic">
+                                  — {mom.notes}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleDeleteMoment(mom.id)}
+                          className="text-zinc-650 hover:text-red-400 p-1 shrink-0 cursor-pointer"
+                          title="Ukloni moment"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-zinc-650 italic text-center py-2">
+                    Nema unesenih istaknutih momenata za ovaj video segment.
                   </p>
                 )}
               </div>

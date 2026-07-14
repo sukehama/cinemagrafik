@@ -11,6 +11,7 @@ interface RatingGridProps {
   onAddSeason: () => void;
   onSetSeasonEpisodeCount?: (seasonNumber: number, count: number) => void;
   onBulkEdit: () => void;
+  onDeleteSeason?: (seasonNumber: number) => void;
 }
 
 export default function RatingGrid({
@@ -19,7 +20,8 @@ export default function RatingGrid({
   onAddEpisodeToSeason,
   onAddSeason,
   onSetSeasonEpisodeCount,
-  onBulkEdit
+  onBulkEdit,
+  onDeleteSeason
 }: RatingGridProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'inverted'>('grid');
   const [editingSeasonNum, setEditingSeasonNum] = useState<number | null>(null);
@@ -178,7 +180,7 @@ export default function RatingGrid({
                       <div className="flex items-center gap-1 mt-0.5 shrink-0">
                         <button
                           onClick={() => onAddEpisodeToSeason(s.seasonNumber)}
-                          className="px-1.5 py-0.5 text-[8px] font-bold text-emerald-400 hover:bg-zinc-900 rounded transition-colors cursor-pointer border border-zinc-800/40"
+                          className="px-1 py-0.5 text-[8px] font-bold text-emerald-400 hover:bg-zinc-900 rounded transition-colors cursor-pointer border border-zinc-800/40"
                           title={entry.type === 'universe' ? "Dodaj stavku" : "Dodaj epizodu"}
                         >
                           +St
@@ -188,10 +190,21 @@ export default function RatingGrid({
                             setCustomEpValue((s.episodes || []).length);
                             setEditingSeasonNum(s.seasonNumber);
                           }}
-                          className="px-1.5 py-0.5 text-[8px] font-bold text-yellow-405 hover:bg-zinc-900 rounded transition-colors cursor-pointer border border-zinc-800/40"
+                          className="px-1 py-0.5 text-[8px] font-bold text-yellow-405 hover:bg-zinc-900 rounded transition-colors cursor-pointer border border-zinc-800/40"
                           title="Promijeni broj stavki"
                         >
                           Vel
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(entry.type === 'universe' ? "Da li ste sigurni da želite obrisati ovu fazu sa svim stavkama?" : "Da li ste sigurni da želite obrisati ovu sezonu sa svim epizodama?")) {
+                              onDeleteSeason?.(s.seasonNumber);
+                            }
+                          }}
+                          className="px-1 py-0.5 text-[8px] font-bold text-red-450 hover:bg-red-950/20 rounded transition-colors cursor-pointer border border-red-900/30"
+                          title={entry.type === 'universe' ? "Obriši fazu" : "Obriši sezonu"}
+                        >
+                          Briši
                         </button>
                       </div>
                     </>
@@ -314,6 +327,16 @@ export default function RatingGrid({
                           className="hover:text-yellow-455 hover:underline text-left transition-colors font-extrabold uppercase cursor-pointer"
                         >
                           Vel.
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(entry.type === 'universe' ? "Da li ste sigurni da želite obrisati ovu fazu sa svim stavkama?" : "Da li ste sigurni da želite obrisati ovu sezonu sa svim epizodama?")) {
+                              onDeleteSeason?.(s.seasonNumber);
+                            }
+                          }}
+                          className="hover:text-red-400 hover:underline text-left transition-colors font-extrabold uppercase cursor-pointer"
+                        >
+                          Briši
                         </button>
                       </div>
                     </>

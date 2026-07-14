@@ -8,12 +8,6 @@ interface AddEntryModalProps {
   onAdd: (newEntry: RatingEntry) => void;
 }
 
-const BANNER_PRESETS = [
-  { name: 'Kibernetički Sleek', banner: 'https://images.unsplash.com/photo-1563507644-15a65571c366?w=1000&q=80', poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&q=80' },
-  { name: 'Svemirsko Istraživanje', banner: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1000&q=80', poster: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400&q=80' },
-  { name: 'Gotički Noir', banner: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1000&q=80', poster: 'https://images.unsplash.com/photo-1509347528160-9a9e33742cdb?w=400&q=80' },
-  { name: 'Zalazak Sunca', banner: 'https://images.unsplash.com/photo-1501183007986-d0d080b147f9?w=1000&q=80', poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&q=80' }
-];
 
 export default function AddEntryModal({ onClose, onAdd }: AddEntryModalProps) {
   const [type, setType] = useState<'show' | 'movie' | 'universe'>('show');
@@ -62,10 +56,6 @@ export default function AddEntryModal({ onClose, onAdd }: AddEntryModalProps) {
     }
   };
 
-  const applyPreset = (index: number) => {
-    setBannerUrl(BANNER_PRESETS[index].banner);
-    setPosterUrl(BANNER_PRESETS[index].poster);
-  };
 
   const updateSeasonsCountAndSync = (count: number) => {
     const minCount = Math.max(1, Math.min(25, count));
@@ -284,25 +274,6 @@ export default function AddEntryModal({ onClose, onAdd }: AddEntryModalProps) {
             />
           </div>
 
-          {/* Quick presets for art choices */}
-          <div className="border-t border-zinc-800/60 pt-4">
-            <span className="block text-xs font-bold uppercase text-zinc-400 tracking-wider mb-2">
-              Predefinisani vizuelni stilovi:
-            </span>
-            <div className="grid grid-cols-4 gap-2">
-              {BANNER_PRESETS.map((preset, idx) => (
-                <button
-                  key={`preset-${idx}`}
-                  type="button"
-                  onClick={() => applyPreset(idx)}
-                  className="bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 p-2 rounded-lg text-left transition cursor-pointer"
-                >
-                  <p className="text-[10px] text-zinc-200 font-black uppercase tracking-wide truncate">{preset.name}</p>
-                  <span className="text-[9px] text-zinc-500 font-mono block">Primijeni</span>
-                </button>
-              ))}
-            </div>
-          </div>
 
           {/* Visual Images layout */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -6,6 +6,16 @@ export interface Actor {
   bio?: string;
   age?: number | string;
   otherInfo?: string;
+  performanceRating?: number; // Rated role performance in a specific movie/episode
+}
+
+export interface FeaturedMoment {
+  id: string;
+  title: string;
+  startTime: string; // e.g. "01:23:45"
+  endTime: string;   // e.g. "01:24:15"
+  youtubeUrl?: string; // Optional YouTube video link or embed
+  notes?: string;
 }
 
 export interface GuestReview {
@@ -27,6 +37,7 @@ export interface Episode {
   overview?: string;
   guestReviews?: GuestReview[];
   actors?: Actor[];
+  featuredMoments?: FeaturedMoment[]; // Optional key moments
   // Custom hyperlink fields
   linkText?: string;
   linkTargetId?: string;
@@ -57,6 +68,7 @@ export interface RatingEntry {
   guestVotes?: GuestVote[]; // Legacy global guest votes for movies or generic backward compatibility
   movieActors?: Actor[];    // Cast listed for single-movie entries
   movieReviews?: GuestReview[]; // Movie reviews
+  movieFeaturedMoments?: FeaturedMoment[]; // Movie clips
 
   // Applicable to shows and universes (where "seasons" are categories in universes):
   seasons?: Season[];
@@ -69,4 +81,3 @@ export interface RatingEntry {
 
 export type SortKey = 'name' | 'rating' | 'year';
 export type SortOrder = 'asc' | 'desc';
-
