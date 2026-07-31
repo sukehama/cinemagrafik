@@ -36,21 +36,32 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
+function isTauriEnvironment(): boolean {
+  if (typeof window === 'undefined') return false;
+  return '__TAURI_INTERNALS__' in window || '__TAURI__' in window;
+}
+
 /**
  * Handles signing in with Google.
- * Attempts popup first, and if blocked or in a sandboxed iframe, falls back to redirect.
+ * In Tauri desktop apps, signInWithPopup doesn't work because the popup window
+ * cannot post the auth result back to the webview (cross-origin restriction).
+ * We detect Tauri and use signInWithRedirect instead, which navigates the whole
+ * webview and returns the result via getRedirectResult() on app reload.
  */
 export async function loginWithGoogle(): Promise<User | null> {
+  if (isTauriEnvironment()) {
+    await signInWithRedirect(auth, googleProvider);
+    return null;
+  }
+
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error: any) {
     console.warn("Popup blocked or failed, attempting redirect login...", error);
-    // If popup is closed by user or cancelled intentionally, don't trigger redirect
     if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
       throw error;
     }
-    // For popup blocked or iframe security restriction, fallback to redirect
     if (
       error.code === 'auth/popup-blocked' || 
       error.code === 'auth/iframe-userAgent-to-be-careful' || 
