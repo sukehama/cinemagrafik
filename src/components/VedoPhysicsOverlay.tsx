@@ -103,7 +103,7 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
     // Spawn new Vedos periodically
     const spawnInterval = setInterval(() => {
       if (particles.length < 35) {
-        const size = 60 + Math.random() * 70;
+        const size = 140 + Math.random() * 120;
         particles.push({
           id: particleIdCounter++,
           x: Math.random() * (width - size),
@@ -120,9 +120,12 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
     }, 450);
 
     const gravity = 0.45;
+    const imgAspect = () => img.naturalWidth > 0 ? img.naturalHeight / img.naturalWidth : 1.6;
 
     const loop = () => {
       ctx.clearRect(0, 0, width, height);
+      const aspect = imgAspect();
+      const renderedHeight = p_size => p_size * aspect;
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
@@ -134,8 +137,9 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
         p.rotation += p.vRot;
 
         // Bounce off bottom floor
-        if (p.y + p.size >= height) {
-          p.y = height - p.size;
+        const h = renderedHeight(p.size);
+        if (p.y + h >= height) {
+          p.y = height - h;
           p.vy = -p.vy * 0.72; // restitution
           p.vx *= 0.95; // friction
           p.bounces++;
@@ -152,13 +156,12 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
           p.x = width - p.size;
           p.vx = -p.vx * 0.8;
         }
-
         // Render Vedo image onto canvas
         ctx.save();
         ctx.translate(p.x + p.size / 2, p.y + p.size / 2);
         ctx.rotate(p.rotation);
         if (img.complete && img.naturalWidth > 0) {
-          ctx.drawImage(img, -p.size / 2, -p.size / 2, p.size, p.size * 1.6);
+          ctx.drawImage(img, -p.size / 2, -p.size * aspect / 2, p.size, p.size * aspect);
         } else {
           ctx.fillStyle = '#eab308';
           ctx.beginPath();

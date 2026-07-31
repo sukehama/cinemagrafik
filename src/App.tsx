@@ -38,42 +38,7 @@ import {
   getUserProfile
 } from './firebaseSync';
 
-import { 
-  Tv, 
-  Film, 
-  Plus, 
-  Search, 
-  User, 
-  Star, 
-  RotateCcw, 
-  Trash2, 
-  Play, 
-  Grid as GridIcon, 
-  Clock, 
-  Info,
-  ChevronDown,
-  ArrowUpDown,
-  BarChart2,
-  Download,
-  Edit,
-  X,
-  Sparkles,
-  Save,
-  Check,
-  Database,
-  Users,
-  Trophy,
-  ChevronLeft,
-  ChevronRight,
-  Home,
-  LogOut,
-  RefreshCw,
-  AlertCircle,
-  Layers,
-  SlidersHorizontal,
-  MoreVertical,
-  MessageSquare
-} from 'lucide-react';
+import { Tv, Film, Plus, Search, User, Star, RotateCcw, Trash2, Play, Grid2x2 as GridIcon, Clock, Info, ChevronDown, ArrowUpDown, ChartBar as BarChart2, Download, CreditCard as Edit, X, Sparkles, Save, Check, Database, Users, Trophy, ChevronLeft, ChevronRight, Hop as Home, LogOut, RefreshCw, CircleAlert as AlertCircle, Layers, SlidersHorizontal, MoveVertical as MoreVertical, MessageSquare } from 'lucide-react';
 
 export default function App() {
   // Cinematic Intro state
@@ -1358,7 +1323,7 @@ export default function App() {
         
         {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
         <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3 backdrop-blur-2xl bg-zinc-950/90 border-b border-zinc-800/80 shadow-2xl transition-all">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="max-w-7xl mx-auto flex flex-col md:grid md:grid-cols-[1fr_auto_1fr] md:items-center gap-3">
             
             {/* TOP LEFT: BRAND LOGO & QUICK ENTRY SELECTOR */}
             <div className="flex items-center justify-between md:justify-start gap-3">
@@ -1422,14 +1387,6 @@ export default function App() {
 
             {/* TOP CENTER: FLOATING NAVIGATION TABS DOCK (Icon-only by default, expands text smoothly on hover) */}
             <nav className="flex items-center justify-center gap-2 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl max-w-full">
-{/* DUGME SA LUPOM SKROZ LIJEVO */}
-<button
-  onClick={() => { setIsUniversalSearchOpen(true); setUniversalQuery(''); }}
-  className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-yellow-400 transition-all duration-300 cursor-pointer shrink-0 hover:scale-105 active:scale-95"
-  title="Pretraži (Ctrl + K)"
->
-  <Search size={16} />
-</button>
               {[
                 { id: 'home', label: 'Meni', icon: Home },
                 { id: 'katalog', label: 'Katalog', icon: Film },
@@ -1482,6 +1439,15 @@ export default function App() {
 
             {/* TOP RIGHT: ACTIONS, TOOLS & USER PROFILE */}
             <div className="flex items-center gap-3">
+              {/* SEARCH BUTTON */}
+              <button
+                onClick={() => { setIsUniversalSearchOpen(true); setUniversalQuery(''); }}
+                className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-yellow-400 transition-all duration-200 cursor-pointer shrink-0 hover:scale-110 active:scale-95"
+                title="Pretraži (Ctrl + K)"
+              >
+                <Search size={16} />
+              </button>
+
               {/* PRIMARY ACTION: ADD NEW ENTRY (Sleek Icon-Only Plus Button) */}
               <button
                 onClick={() => setIsAddModalOpen(true)}
