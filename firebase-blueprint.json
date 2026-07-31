@@ -1,0 +1,136 @@
+{
+  "entities": {
+    "RatingEntry": {
+      "title": "RatingEntry",
+      "description": "Represents a single movie, TV show, or cinematic universe in the catalog",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the entry"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["show", "movie", "universe"],
+          "description": "The category of the rating entry"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the show or movie"
+        },
+        "year": {
+          "type": "string",
+          "description": "Release year or range"
+        },
+        "description": {
+          "type": "string",
+          "description": "Brief description of the entry"
+        },
+        "posterUrl": {
+          "type": "string",
+          "description": "URL for the cover or poster image"
+        },
+        "bannerUrl": {
+          "type": "string",
+          "description": "URL for the detail page banner"
+        },
+        "movieRating": {
+          "type": "number",
+          "description": "Overall rating if the entry is a movie"
+        }
+      },
+      "required": ["id", "type", "name", "year", "description"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profile of an authenticated application contributor",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Authentication user UID"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User's public display name"
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "User's profile photo URL"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of account creation"
+        },
+        "lastActive": {
+          "type": "string",
+          "description": "ISO timestamp of last activity"
+        },
+        "contributionsCount": {
+          "type": "number",
+          "description": "Total number of verified updates or entries made by this user"
+        }
+      },
+      "required": ["uid", "displayName", "email"]
+    },
+    "ContributionLog": {
+      "title": "ContributionLog",
+      "description": "A historic log record of a catalog contribution or update",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the log document"
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of the contributor"
+        },
+        "userName": {
+          "type": "string",
+          "description": "Display name of the contributor"
+        },
+        "userPhotoUrl": {
+          "type": "string",
+          "description": "Photo URL of the contributor"
+        },
+        "actionType": {
+          "type": "string",
+          "enum": ["add", "edit", "delete", "rating", "review"],
+          "description": "The category of contribution action"
+        },
+        "entryName": {
+          "type": "string",
+          "description": "The name of the catalog entry that was modified"
+        },
+        "details": {
+          "type": "string",
+          "description": "Descriptive text about the update"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO timestamp when the contribution was made"
+        }
+      },
+      "required": ["userId", "userName", "actionType", "entryName", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/entries/{entryId}": {
+      "schema": { "$ref": "RatingEntry" },
+      "description": "Universal movie, TV show, and cinematic universe catalog collection"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "UserProfile" },
+      "description": "Authenticated user profiles with active contributions counters"
+    },
+    "/contributions/{contributionId}": {
+      "schema": { "$ref": "ContributionLog" },
+      "description": "Activity log records documenting community edits in real-time"
+    }
+  }
+}

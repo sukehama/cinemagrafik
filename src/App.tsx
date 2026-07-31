@@ -5,7 +5,7 @@ import { relaunch } from '@tauri-apps/plugin-process';
 import { RatingEntry, Episode, Season, SortKey, SortOrder, Actor } from './types';
 import { DEFAULT_ENTRIES } from './data';
 import { getEntriesFromDB, saveEntriesToDB } from './db';
-import { calculateAverageRating, calculatePersonalRating, calculateTotalVotes, calculateCombinedAverageRating, getRatingColorClass, getShowDynamicColors } from './utils';
+import { calculateAverageRating, calculatePersonalRating, calculateTotalVotes, calculateCombinedAverageRating, getRatingColorClass, getShowDynamicColors, getEntryAtmosphere } from './utils';
 import RatingGrid from './components/RatingGrid';
 import DetailPopup from './components/DetailPopup';
 import AddEntryModal from './components/AddEntryModal';
@@ -17,6 +17,9 @@ import BulkEditModal from './components/BulkEditModal';
 import ActorsView from './components/ActorsView';
 import LeaderboardView from './components/LeaderboardView';
 import UserProfileModal from './components/UserProfileModal';
+import UniversesView from './components/UniversesView';
+import CinematicIntro from './components/CinematicIntro';
+import { SkeletonGrid, SkeletonFilmCard, SkeletonHeroBanner } from './components/SkeletonLoader';
 
 // Firebase imports
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -28,7 +31,9 @@ import {
   syncUserProfile, 
   fetchContributions, 
   ContributionLog, 
-  UserProfile 
+  UserProfile,
+  updateUserProfile,
+  getUserProfile
 } from './firebaseSync';
 
 import { 
@@ -61,10 +66,17 @@ import {
   Home,
   LogOut,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Layers,
+  SlidersHorizontal,
+  MoreVertical
 } from 'lucide-react';
 
 export default function App() {
+  // Cinematic Intro state
+  const [showIntro, setShowIntro] = useState<boolean>(true);
+  // Hovered navigation tab state for responsive title expansion
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
   // Theme state: Forced permanently to true (IMDb identical native dark mode) as requested by user
   const isDarkMode = true;
 
@@ -117,9 +129,10 @@ export default function App() {
   // Universal search dialog state
   const [isUniversalSearchOpen, setIsUniversalSearchOpen] = useState(false);
   const [universalQuery, setUniversalQuery] = useState('');
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   // Main Tab Navigation & Sidebar collapsible state
-  const [activeTab, setActiveTab] = useState<'home' | 'katalog' | 'glumci' | 'leaderboard'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'katalog' | 'univerzumi' | 'glumci' | 'leaderboard'>('home');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
     const saved = localStorage.getItem('cinema-sidebar-expanded');
     return saved !== 'false';
@@ -157,6 +170,41 @@ export default function App() {
   const [isContributionsLoading, setIsContributionsLoading] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [showSignInDropdown, setShowSignInDropdown] = useState(false);
+
+  // Social Profile Viewing States
+  const [selectedSocialProfile, setSelectedSocialProfile] = useState<UserProfile | null>(null);
+  const [isSocialProfileOpen, setIsSocialProfileOpen] = useState(false);
+  const [socialContributions, setSocialContributions] = useState<ContributionLog[]>([]);
+  const [isSocialContributionsLoading, setIsSocialContributionsLoading] = useState(false);
+
+  const handleProfileUpdate = async (updatedData: Partial<UserProfile>) => {
+    if (!user) return;
+    try {
+      await updateUserProfile(user.uid, updatedData);
+      setUserProfile(prev => prev ? { ...prev, ...updatedData } : null);
+    } catch (err) {
+      console.error("Failed to update user profile in Firestore:", err);
+    }
+  };
+
+  const handleOpenSocialProfile = async (userId: string) => {
+    setIsSocialContributionsLoading(true);
+    setSelectedSocialProfile(null);
+    setIsSocialProfileOpen(true);
+    try {
+      const profileToView = await getUserProfile(userId);
+      setSelectedSocialProfile(profileToView);
+      if (profileToView) {
+        // Fetch contribution logs for this selected user specifically
+        const logs = await fetchContributions(userId);
+        setSocialContributions(logs);
+      }
+    } catch (err) {
+      console.error("Failed to load community user profile:", err);
+    } finally {
+      setIsSocialContributionsLoading(false);
+    }
+  };
 
   // Synchronization References to prevent race conditions & loop feedback
   const isApplyingSnapshotRef = useRef(false);
@@ -415,6 +463,10 @@ export default function App() {
     if (!activeEntry) return null;
     return getShowDynamicColors(activeEntry.name);
   }, [activeEntry]);
+
+  const atmosphere = useMemo(() => {
+    return getEntryAtmosphere(activeEntry, activeTab);
+  }, [activeEntry, activeTab]);
 
   // Find the highest rated entry in the database
   const highestRatedEntry = useMemo(() => {
@@ -1252,222 +1304,287 @@ export default function App() {
   };
 
   return (
-    <div id="rating-app-root" className="min-h-screen transition-all duration-300 bg-zinc-950 text-slate-100 flex flex-col md:flex-row">
+    <div id="rating-app-root" className="min-h-screen bg-zinc-950 text-slate-100 relative overflow-x-hidden selection:bg-yellow-400 selection:text-zinc-950 font-sans">
       
-      {/* SIDEBAR NAVIGATION */}
-      <aside 
-        className="bg-zinc-900 border-r border-zinc-850 flex flex-col transition-all duration-300 shrink-0 w-64 md:w-64 relative z-40"
-        style={{ width: isSidebarExpanded ? '16rem' : '5rem' }}
-      >
-        {/* Sidebar Header */}
-        <div className="p-4 border-b border-zinc-850 flex items-center justify-between">
-          <div className="flex items-center gap-2 overflow-hidden select-none">
-            <span className="bg-yellow-400 text-zinc-950 font-black px-2 py-0.5 rounded text-[11px] shrink-0 font-sans tracking-tight uppercase">
-              Cinema
-            </span>
-            {isSidebarExpanded && (
-              <span className="font-sans font-extrabold text-[13px] tracking-tight uppercase text-zinc-100 truncate animate-fade-in">
-                Grafik
-              </span>
-            )}
-          </div>
-          <button
-            onClick={() => {
-              const nextState = !isSidebarExpanded;
-              setIsSidebarExpanded(nextState);
-              localStorage.setItem('cinema-sidebar-expanded', String(nextState));
-            }}
-            className="text-zinc-400 hover:text-white bg-zinc-950/40 p-1.5 rounded-lg border border-zinc-800 cursor-pointer active:scale-95 transition"
-            title={isSidebarExpanded ? "Sakrij meni" : "Prikaži meni"}
-          >
-            {isSidebarExpanded ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
-          </button>
-        </div>
+      {/* CINEMATIC INTRO OVERLAY */}
+      <CinematicIntro 
+        show={showIntro} 
+        onComplete={() => {
+          setShowIntro(false);
+        }} 
+      />
 
-        {/* Sidebar Items */}
-        <nav className="flex-1 p-3.5 space-y-2 select-none">
-          {/* Glavni Meni Tab */}
-          <button
-            onClick={() => { setActiveTab('home'); setSelectedActorName(null); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
-              activeTab === 'home'
-                ? 'bg-yellow-400 text-zinc-950 font-black shadow-lg shadow-yellow-500/10'
-                : 'text-zinc-400 hover:bg-zinc-855 hover:text-zinc-100'
-            }`}
-          >
-            <Home size={16} className="shrink-0" />
-            {isSidebarExpanded && <span className="truncate">Glavni Meni</span>}
-          </button>
+      {/* SUBTLE DARK NEUTRAL BOTTOM GRADIENT (Very slight grayish tone at the very bottom reaching upwards) */}
+      <div className="fixed inset-0 pointer-events-none z-0 bg-gradient-to-t from-zinc-800/15 via-zinc-950/80 to-zinc-950" />
 
-          {/* Katalog Tab & Collapsible items */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-1">
+      {/* MAIN CONTAINER */}
+      <div className="relative z-10 flex flex-col min-h-screen">
+        
+        {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
+        <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3 backdrop-blur-2xl bg-zinc-950/90 border-b border-zinc-800/80 shadow-2xl transition-all">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+            
+            {/* TOP LEFT: BRAND LOGO & QUICK ENTRY SELECTOR */}
+            <div className="flex items-center justify-between md:justify-start gap-3">
               <button
-                onClick={() => { setActiveTab('katalog'); setSelectedActorName(null); }}
-                className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
-                  activeTab === 'katalog'
-                    ? 'bg-yellow-400 text-zinc-950 font-black shadow-lg shadow-yellow-500/10'
-                    : 'text-zinc-400 hover:bg-zinc-855 hover:text-zinc-100'
-                }`}
+                onClick={() => { setActiveTab('home'); setSelectedActorName(null); }}
+                className="flex items-center gap-2.5 group cursor-pointer"
               >
-                <Film size={16} className="shrink-0" />
-                {isSidebarExpanded && <span className="truncate">Katalog</span>}
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-yellow-400 to-amber-500 flex items-center justify-center text-zinc-955 font-black shadow-[0_0_15px_rgba(250,204,21,0.35)] group-hover:scale-105 transition-transform">
+                  <Film size={20} className="stroke-[2.5]" />
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black uppercase tracking-wider text-zinc-100 group-hover:text-yellow-400 transition-colors">
+                      Cinema<span className="text-yellow-400">Grafik</span>
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400 font-mono">Katalog Ocjena</div>
+                </div>
               </button>
-              {isSidebarExpanded && entries.length > 0 && (
-                <button
-                  type="button"
-                  onClick={toggleCatalogList}
-                  className="p-2 text-zinc-500 hover:text-zinc-205 rounded-lg hover:bg-zinc-850/50 cursor-pointer transition shrink-0"
-                  title={isCatalogListExpanded ? "Sakrij listu kataloga" : "Prikaži listu kataloga"}
-                >
-                  <ChevronDown size={14} className={`transform transition-transform duration-200 ${isCatalogListExpanded ? 'rotate-180' : ''}`} />
-                </button>
+
+              {/* QUICK ENTRY DROPDOWN MENU (Jump directly to any Movie/Show/Universe) */}
+              {entries.length > 0 && (
+                <div className="relative hidden lg:block">
+                  <select
+                    value={activeEntry?.id || ''}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleSelectEntry(e.target.value);
+                        setActiveTab('katalog');
+                        setSelectedActorName(null);
+                      }
+                    }}
+                    className="bg-zinc-900/90 text-zinc-200 text-xs font-bold py-1.5 px-3 pr-8 rounded-xl border border-zinc-800/90 hover:border-yellow-400/50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-yellow-400/40 truncate max-w-[210px] shadow-inner"
+                  >
+                    <option value="" disabled>-- Izaberi Naslov --</option>
+                    {entries.map(e => (
+                      <option key={`quick-select-${e.id}`} value={e.id}>
+                        {e.type === 'universe' ? '🌌 ' : e.type === 'movie' ? '🎬 ' : '📺 '}
+                        {e.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
 
-            {/* Collapsible list of entries inside sidebar under "Katalog" button */}
-            {isSidebarExpanded && isCatalogListExpanded && entries.length > 0 && (
-              <div className="pl-6 pr-1 py-1 max-h-[220px] overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-                {entries.map(e => {
-                  const isSelected = e.id === activeEntry?.id && activeTab === 'katalog';
-                  return (
-                    <button
-                      key={`sidebar-entry-${e.id}`}
-                      onClick={() => {
-                        handleSelectEntry(e.id);
-                        setActiveTab('katalog');
-                        setSelectedActorName(null);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-bold truncate block transition-all ${
-                        isSelected
-                          ? 'text-yellow-400 bg-zinc-950 border border-zinc-855/60'
-                          : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-850/50'
-                      }`}
-                    >
-                      • {e.name}
-                    </button>
-                  );
-                })}
+            {/* TOP CENTER: FLOATING NAVIGATION TABS DOCK (Icon-only by default, expands text smoothly on hover) */}
+            <nav className="flex items-center justify-center gap-2 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl max-w-full">
+              {[
+                { id: 'home', label: 'Meni', icon: Home },
+                { id: 'katalog', label: 'Katalog', icon: Film },
+                { id: 'univerzumi', label: 'Univerzumi', icon: Layers, badge: entries.filter(e => e.type === 'universe').length },
+                { id: 'glumci', label: 'Glumci', icon: Users },
+                { id: 'leaderboard', label: 'Rang Liste', icon: Trophy },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isSelected = activeTab === tab.id;
+                const isHovered = hoveredTab === tab.id;
+
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id as any);
+                      setSelectedActorName(null);
+                    }}
+                    onMouseEnter={() => setHoveredTab(tab.id)}
+                    onMouseLeave={() => setHoveredTab(null)}
+                    className={`group relative flex items-center justify-center h-9 px-3 rounded-xl transition-all duration-300 ease-out cursor-pointer shrink-0 border ${
+                      isHovered
+                        ? '-translate-y-1 scale-105 z-20 bg-zinc-900 border-yellow-400 text-yellow-400 shadow-[0_4px_20px_rgba(250,204,21,0.25)]'
+                        : isSelected
+                          ? 'z-10 bg-yellow-400 text-zinc-955 border-yellow-300 shadow-[0_0_15px_rgba(250,204,21,0.35)]'
+                          : 'z-0 bg-zinc-900/60 text-zinc-400 border-zinc-800/80 hover:text-zinc-200'
+                    }`}
+                    title={tab.label}
+                  >
+                    <Icon size={17} className="shrink-0 transition-transform duration-300" />
+                    
+                    {/* Silky smooth text expansion on hover */}
+                    <div className={`overflow-hidden transition-all duration-300 ease-out flex items-center ${
+                      isHovered ? 'max-w-xs opacity-100 ml-2.5' : 'max-w-0 opacity-0 ml-0'
+                    }`}>
+                      <span className="text-xs font-black uppercase tracking-wider whitespace-nowrap">
+                        {tab.label}
+                      </span>
+                      {tab.badge !== undefined && tab.badge > 0 && (
+                        <span className="ml-1.5 px-1.5 py-0.2 text-[10px] rounded-full bg-purple-500/20 text-purple-300 font-mono font-bold">
+                          {tab.badge}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* TOP RIGHT: ACTIONS, TOOLS & USER PROFILE */}
+            <div className="flex items-center gap-3">
+              {/* PRIMARY ACTION: ADD NEW ENTRY (Sleek Icon-Only Plus Button) */}
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                id="btn-open-add-slate"
+                className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black rounded-xl shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:shadow-[0_0_25px_rgba(250,204,21,0.5)] hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
+                title="Dodaj Novi Naslov (Film, Serija ili Univerzum)"
+              >
+                <Plus size={18} strokeWidth={3} />
+              </button>
+
+              {/* TOOLS DROPDOWN MENU */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsToolsOpen(!isToolsOpen)}
+                  id="btn-tools-dropdown"
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all duration-200 cursor-pointer ${
+                    isToolsOpen
+                      ? 'bg-zinc-800 text-white border-yellow-400/50 shadow-[0_0_15px_rgba(250,204,21,0.15)]'
+                      : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white'
+                  }`}
+                  title="Upravljanje i dodatne alatke"
+                >
+                  <SlidersHorizontal size={15} className="text-yellow-400" />
+                  <span className="hidden sm:inline">Alati</span>
+                  <ChevronDown size={14} className={`transform transition-transform duration-200 ${isToolsOpen ? 'rotate-180 text-yellow-400' : 'text-zinc-500'}`} />
+                </button>
+
+                <AnimatePresence>
+                  {isToolsOpen && (
+                    <>
+                      {/* Click away backdrop */}
+                      <div className="fixed inset-0 z-40" onClick={() => setIsToolsOpen(false)} />
+
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-64 bg-zinc-950/95 border border-zinc-800/90 rounded-2xl p-2 shadow-2xl z-50 text-left space-y-1 backdrop-blur-xl"
+                      >
+                        <div className="px-3 py-2 border-b border-zinc-900 mb-1 flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-black uppercase tracking-widest text-zinc-400">
+                            Upravljanje & Alatke
+                          </span>
+                          <Sparkles size={12} className="text-yellow-400" />
+                        </div>
+
+                        {/* Surprise Me */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setIsSurpriseOpen(true);
+                          }}
+                          id="btn-surprise-me"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-purple-300 hover:bg-purple-500/15 hover:text-purple-200 transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
+                            <Sparkles size={14} className="animate-pulse" />
+                          </div>
+                          <div>
+                            <div className="font-bold">Iznenadi me!</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Nasumična epizoda ili film</div>
+                          </div>
+                        </button>
+
+                        {/* HTML Export */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setExportInitialTab('web-html');
+                            setIsExportModalOpen(true);
+                          }}
+                          id="btn-open-export-hub"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
+                            <Download size={14} />
+                          </div>
+                          <div>
+                            <div className="font-bold">HTML Izvoz Kataloga</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Preuzmi samostalni web fajl</div>
+                          </div>
+                        </button>
+
+                        {/* JSON Database */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setExportInitialTab('json-backup');
+                            setIsExportModalOpen(true);
+                          }}
+                          id="btn-open-json-db"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
+                            <Database size={14} />
+                          </div>
+                          <div>
+                            <div className="font-bold">JSON Baza Podataka</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Sigurnosna kopija i uvoz</div>
+                          </div>
+                        </button>
+
+                        {/* Manual Save */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            handleManualSave();
+                          }}
+                          id="btn-manual-sync-save"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-emerald-300 hover:bg-emerald-500/15 transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+                            <Save size={14} />
+                          </div>
+                          <div>
+                            <div className="font-bold">Spasi Sve Promjene</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Osiguraj podatke u bazi</div>
+                          </div>
+                        </button>
+
+                        {/* Replay Intro */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setShowIntro(true);
+                          }}
+                          id="btn-replay-intro"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-yellow-400 group-hover:scale-105 transition-transform">
+                            <Sparkles size={14} className="animate-spin-slow" />
+                          </div>
+                          <div>
+                            <div className="font-bold">Ponovi Uvodnu Animaciju</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Cinema Grafik uvod</div>
+                          </div>
+                        </button>
+
+                        <div className="pt-1 border-t border-zinc-900 mt-1">
+                          {/* Reset defaults */}
+                          <button
+                            onClick={() => {
+                              setIsToolsOpen(false);
+                              handleResetToDefaults();
+                            }}
+                            id="btn-reset-data"
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-red-400 hover:bg-red-500/15 transition-all text-left cursor-pointer group"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-105 transition-transform">
+                              <RotateCcw size={14} />
+                            </div>
+                            <div>
+                              <div className="font-bold">Resetuj Sve Podatke</div>
+                              <div className="text-[9px] text-zinc-400 font-normal">Vrati na početne naslove</div>
+                            </div>
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
-            )}
-          </div>
-
-          {/* Glumci Tab */}
-          <button
-            onClick={() => { setActiveTab('glumci'); setSelectedActorName(null); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
-              activeTab === 'glumci'
-                ? 'bg-yellow-400 text-zinc-955 font-black shadow-lg shadow-yellow-500/10'
-                : 'text-zinc-400 hover:bg-zinc-855 hover:text-zinc-100'
-            }`}
-          >
-            <Users size={16} className="shrink-0" />
-            {isSidebarExpanded && <span className="truncate">Baza Glumaca</span>}
-          </button>
-
-          {/* Leaderboard Tab */}
-          <button
-            onClick={() => { setActiveTab('leaderboard'); setSelectedActorName(null); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider text-left cursor-pointer ${
-              activeTab === 'leaderboard'
-                ? 'bg-yellow-404 bg-yellow-400 text-zinc-955 font-black shadow-lg shadow-yellow-500/10'
-                : 'text-zinc-450 hover:bg-zinc-855 hover:text-zinc-100'
-            }`}
-          >
-            <Trophy size={16} className="shrink-0" />
-            {isSidebarExpanded && <span className="truncate">Rang Liste</span>}
-          </button>
-        </nav>
-
-        {/* Sidebar Footer */}
-        {isSidebarExpanded && (
-          <div className="p-4 border-t border-zinc-850 text-[10px] text-zinc-600 font-mono text-center select-none animate-fade-in">
-            v2.0 • Online Sync
-          </div>
-        )}
-      </aside>
-
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 min-w-0 flex flex-col bg-zinc-955">
-        
-        {/* HEADER BAR */}
-        <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-6 py-4 shadow-md backdrop-blur-md border-b transition-colors bg-zinc-950/90 border-zinc-900">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          
-          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-            <span className="text-zinc-400 font-extrabold text-sm uppercase tracking-widest font-sans">
-              Katalog Ocjena
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Surprise Me - Iznenadi me! */}
-            <button
-              onClick={() => setIsSurpriseOpen(true)}
-              id="btn-surprise-me"
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-black bg-purple-600/15 text-purple-400 border border-purple-500/35 rounded-lg hover:bg-purple-600/25 active:scale-95 transition-all cursor-pointer"
-              title="Izaberite nasumičnu epizodu ili film sa slavljeničkim efektom"
-            >
-              <Sparkles size={14} className="animate-pulse" />
-              <span>Iznenadi me!</span>
-            </button>            {/* HTML Export Button */}
-            <button
-              onClick={() => {
-                setExportInitialTab('web-html');
-                setIsExportModalOpen(true);
-              }}
-              id="btn-open-export-hub"
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-zinc-800 text-zinc-300 bg-zinc-900/40 hover:bg-zinc-900 hover:text-white rounded-lg transition-all active:scale-95 cursor-pointer font-sans"
-              title="Preuzmite samostalni HTML katalog"
-            >
-              <Download size={14} />
-              <span className="hidden sm:inline">HTML Izvoz</span>
-            </button>
-
-            {/* Direct JSON Database backup button */}
-            <button
-              onClick={() => {
-                setExportInitialTab('json-backup');
-                setIsExportModalOpen(true);
-              }}
-              id="btn-open-json-db"
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-zinc-800 text-zinc-300 bg-zinc-900/40 hover:bg-zinc-900 hover:text-white rounded-lg transition-all active:scale-95 cursor-pointer font-sans"
-              title="Uvoz i izvoz JSON baze podataka"
-            >
-              <Database size={14} />
-              <span className="hidden sm:inline">JSON Baza</span>
-            </button>
-
-            {/* Manual Local Save button */}
-            <button
-              onClick={handleManualSave}
-              id="btn-manual-sync-save"
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-extrabold bg-emerald-600/15 text-emerald-400 border border-emerald-500/35 rounded-lg hover:bg-emerald-600/25 active:scale-95 transition-all cursor-pointer"
-              title="Ručno spremi i osiguraj sve promjene u pregledniku"
-            >
-              <Save size={14} />
-              <span>Spasi Sve</span>
-            </button>
-
-            {/* Reset presets button */}
-            <button
-              onClick={handleResetToDefaults}
-              id="btn-reset-data"
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-zinc-800 text-zinc-400 bg-zinc-900/40 hover:bg-zinc-900 hover:text-white rounded-lg transition-all active:scale-95 cursor-pointer"
-              title="Isprazni sve podatke"
-            >
-              <RotateCcw size={14} /> <span className="hidden sm:inline">Očisti Sve</span>
-            </button>
-
-            {/* Add Custom Title block - compact plus icon only as requested */}
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              id="btn-open-add-slate"
-              className="flex items-center justify-center bg-yellow-400 hover:bg-yellow-500 text-zinc-950 font-black p-2 rounded-lg shadow-md shadow-yellow-500/10 active:scale-95 transition-all cursor-pointer"
-              title="Dodaj Novi Naslov (Film, Serija ili Univerzum)"
-            >
-              <Plus size={16} strokeWidth={3} />
-            </button>
 
             {/* PROFILE / GOOGLE SIGN-IN BUTTON */}
             <div className="relative">
@@ -1479,13 +1596,13 @@ export default function App() {
                 // LOGGED IN: Beautiful profile image with status ring and click action
                 <button
                   onClick={() => setIsProfileOpen(true)}
-                  className="flex items-center gap-1.5 focus:outline-none group cursor-pointer"
-                  title={`Profil: ${user.displayName}`}
+                  className="flex items-center gap-1.5 focus:outline-none group cursor-pointer animate-fade-in"
+                  title={`Profil: ${userProfile?.displayName || user.displayName}`}
                 >
                   <div className="relative">
                     <img 
-                      src={user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80'} 
-                      alt={user.displayName || 'Korisnik'} 
+                      src={userProfile?.photoURL || user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80'} 
+                      alt={userProfile?.displayName || user.displayName || 'Korisnik'} 
                       className="w-9 h-9 rounded-full border-2 border-yellow-400 group-hover:border-yellow-500 transition object-cover"
                       referrerPolicy="no-referrer"
                     />
@@ -1521,20 +1638,45 @@ export default function App() {
                           </p>
                         </div>
 
-                        {syncError && (
+                        {syncError === 'unauthorized-domain' ? (
+                          <div className="bg-amber-950/50 border border-amber-900/60 p-3.5 rounded-xl space-y-2.5 text-amber-200">
+                            <div className="flex gap-2 text-[11px] font-black uppercase tracking-wider text-amber-400 items-center">
+                              <AlertCircle size={14} className="shrink-0" />
+                              <span>Autorizacija Domene</span>
+                            </div>
+                            <p className="text-[10px] text-zinc-300 leading-relaxed">
+                              Kako bi Google prijava radila u Tauri aplikaciji i web pregledu, morate dodati ove domene u svoju Firebase konzolu:
+                            </p>
+                            <div className="bg-zinc-950 p-2 rounded-lg text-[9px] font-mono text-zinc-300 space-y-1 select-all border border-zinc-900 leading-normal">
+                              <div>• <span className="text-yellow-400">tauri.localhost</span></div>
+                              <div>• <span className="text-yellow-400">localhost</span></div>
+                              <div>• <span className="text-yellow-400">ais-dev-tvw4rthsz5lns4cdupfdzq-407597925605.europe-west1.run.app</span></div>
+                              <div>• <span className="text-yellow-400">ais-pre-tvw4rthsz5lns4cdupfdzq-407597925605.europe-west1.run.app</span></div>
+                            </div>
+                            <div className="text-[9px] text-zinc-400 leading-relaxed pt-1 border-t border-zinc-900">
+                              <strong>Koraci:</strong> Otvorite <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-yellow-400 underline hover:text-yellow-300 font-bold">Firebase Konzolu</a>, idite na <strong>Authentication &rarr; Settings &rarr; Authorized domains</strong> i dodajte ih na popis.
+                            </div>
+                          </div>
+                        ) : syncError ? (
                           <div className="bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl flex gap-2 text-[10px] text-red-400 font-bold leading-relaxed">
                             <AlertCircle size={14} className="shrink-0 mt-0.5" />
                             <span>{syncError}</span>
                           </div>
-                        )}
+                        ) : null}
 
                         <button
                           onClick={async () => {
-                            setShowSignInDropdown(false);
                             try {
+                              setSyncError(null);
                               await loginWithGoogle();
+                              setShowSignInDropdown(false);
                             } catch (err: any) {
-                              setSyncError(err.message || 'Prijava nije uspjela');
+                              console.error("Google login error:", err);
+                              let friendlyMsg = err.message || 'Prijava nije uspjela';
+                              if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain'))) {
+                                friendlyMsg = 'unauthorized-domain';
+                              }
+                              setSyncError(friendlyMsg);
                             }
                           }}
                           className="w-full flex items-center justify-center gap-2.5 bg-white hover:bg-zinc-100 text-zinc-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer shadow-lg"
@@ -1558,60 +1700,77 @@ export default function App() {
         </div>
       </header>
 
+      {/* CINEMATIC INTRO ANIMATION & AUDIO */}
+      <CinematicIntro
+        show={showIntro}
+        onComplete={() => {
+          setShowIntro(false);
+          sessionStorage.setItem('cinema-intro-shown', 'true');
+        }}
+      />
+
       {/* MAIN CONTAINER */}
       <main id="app-main-view" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8 pb-16">
         
         {entries.length === 0 ? (
-          <div className="p-16 text-center border-2 border-dashed rounded-3xl max-w-2xl mx-auto flex flex-col items-center justify-center space-y-4 transition-all bg-zinc-900/10 border-zinc-800/80" id="empty-workspace-state">
-            <div className="w-16 h-16 rounded-2xl bg-yellow-400/10 flex items-center justify-center text-yellow-400 mb-2">
+          <div className="p-16 text-center border border-zinc-800/80 rounded-3xl max-w-2xl mx-auto flex flex-col items-center justify-center space-y-4 transition-all bg-zinc-900/40 backdrop-blur-md shadow-2xl" id="empty-workspace-state">
+            <div className="w-16 h-16 rounded-2xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-yellow-400 mb-2 shadow-[0_0_20px_rgba(250,204,21,0.15)]">
               <Film className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-black uppercase tracking-tight text-zinc-200">
+            <h3 className="text-xl font-black uppercase tracking-tight text-zinc-100">
               Cinema Grafik
             </h3>
-            <p className="text-zinc-500 text-xs sm:text-sm max-w-sm leading-relaxed">
-              Dobrodošli u Cinema Grafik! Vaša lična baza ocjena je prazna. Započnite kreiranjem nove TV serije, filma ili Cinematic Universuma za praćenje i vizualizaciju. Svi podaci se čuvaju u memoriji vašeg pretraživača.
+            <p className="text-zinc-300 text-xs sm:text-sm max-w-sm leading-relaxed">
+              Dobrodošli u Cinema Grafik! Vaša baza ocjena je spremna. Započnite kreiranjem nove TV serije, filma ili Cinematic Universuma za praćenje i vizualizaciju.
             </p>
             <button
               onClick={() => setIsAddModalOpen(true)}
               id="btn-add-first-title"
-              className="mt-2 flex items-center gap-1.5 bg-yellow-400 hover:bg-yellow-500 text-zinc-950 font-black px-5 py-3 rounded-xl text-xs tracking-wider uppercase shadow-md shadow-yellow-500/10 active:scale-95 transition-all cursor-pointer"
+              className="mt-2 flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black px-6 py-3.5 rounded-2xl text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(250,204,21,0.25)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer"
             >
-              <Plus size={14} /> Dodaj Prvi Naslov
+              <Plus size={16} strokeWidth={3} /> Dodaj Prvi Naslov
             </button>
           </div>
         ) : (
-          <>
+          <AnimatePresence mode="wait">
             {activeTab === 'home' ? (
-              <div className="space-y-8 animate-fade-in" id="glavni-meni-view">
+              <motion.div
+                key="tab-home"
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="space-y-8" 
+                id="glavni-meni-view"
+              >
                 {/* WELCOME BANNER */}
-                <div className="relative p-6 sm:p-8 rounded-3xl overflow-hidden border border-zinc-900 bg-zinc-950 shadow-2xl">
+                <div className="relative p-6 sm:p-8 rounded-3xl overflow-hidden border border-zinc-800/80 bg-zinc-900/60 backdrop-blur-md shadow-2xl">
                   {/* Subtle decorative mesh background */}
-                  <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]" />
+                  <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]" />
                   <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
                     <div className="space-y-2 text-center md:text-left">
-                      <div className="inline-flex items-center gap-2 bg-yellow-400/10 text-yellow-400 px-3 py-1 rounded-full border border-yellow-400/20 text-[10px] font-black uppercase tracking-widest">
+                      <div className="inline-flex items-center gap-2 bg-yellow-400/10 text-yellow-400 px-3 py-1 rounded-full border border-yellow-400/20 text-[10px] font-black uppercase tracking-widest shadow-sm">
                         <Sparkles size={11} className="animate-spin-slow" /> Cinema Grafik v2.0
                       </div>
-                      <h2 className="text-2xl sm:text-3.5xl font-black text-white tracking-tight">
+                      <h2 className="text-xl sm:text-2.5xl font-black text-white tracking-tight uppercase">
                         Dobrodošli u Vaš Cinema Grafik!
                       </h2>
-                      <p className="text-zinc-400 text-xs sm:text-sm max-w-2xl leading-relaxed">
+                      <p className="text-zinc-200 text-xs sm:text-sm max-w-2xl leading-relaxed tracking-wide font-normal">
                         Dobrodošli u centralnu bazu i vizualni katalog za ocjenjivanje vaših omiljenih filmova, serija i franšiza. Kreirajte detaljne grafikone ocjena, upravljajte glumačkim postavama, pratite trendove i izvezite svoje kataloge u samostalni HTML format!
                       </p>
                     </div>
                     <div className="shrink-0 flex flex-col sm:flex-row gap-3">
                       <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-zinc-950 font-black px-5 py-3 rounded-xl text-xs tracking-wider uppercase shadow-lg shadow-yellow-500/10 active:scale-95 transition-all cursor-pointer animate-pulse"
+                        className="flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black px-5 py-3 rounded-2xl text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(250,204,21,0.25)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer"
                       >
-                        <Plus size={14} /> Dodaj Novi Naslov
+                        <Plus size={15} strokeWidth={3} /> Dodaj Novi Naslov
                       </button>
                       <button
                         onClick={() => setIsSurpriseOpen(true)}
-                        className="flex items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-850 text-purple-405 border border-purple-500/35 px-5 py-3 rounded-xl text-xs font-black tracking-wider uppercase active:scale-95 transition-all cursor-pointer"
+                        className="flex items-center justify-center gap-2 bg-zinc-950/80 hover:bg-zinc-900 text-purple-300 border border-purple-500/40 px-5 py-3 rounded-2xl text-xs font-black tracking-wider uppercase hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
                       >
-                        <Sparkles size={14} /> Iznenadi Me!
+                        <Sparkles size={15} /> Iznenadi Me!
                       </button>
                     </div>
                   </div>
@@ -1620,45 +1779,45 @@ export default function App() {
                 {/* STATISTICS BENTO GRID */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {/* Stats Card: Movies */}
-                  <div className="bg-zinc-950 p-5 rounded-2xl border border-zinc-900 space-y-1">
+                  <div className="bg-zinc-900/60 backdrop-blur-md p-5 rounded-2xl border border-zinc-800/80 space-y-1 hover:-translate-y-0.5 transition-all duration-200 shadow-xl">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500">Igrani Filmovi</span>
+                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-400">Igrani Filmovi</span>
                       <Film size={14} className="text-sky-400" />
                     </div>
                     <p className="text-2xl sm:text-3.5xl font-black text-white font-mono leading-none">
                       {entries.filter(e => e.type === 'movie').length}
                     </p>
-                    <p className="text-[9px] text-zinc-650 font-bold uppercase">U bazi podataka</p>
+                    <p className="text-[9px] text-zinc-400 font-bold uppercase">U bazi podataka</p>
                   </div>
 
                   {/* Stats Card: TV Shows */}
-                  <div className="bg-zinc-950 p-5 rounded-2xl border border-zinc-900 space-y-1">
+                  <div className="bg-zinc-900/60 backdrop-blur-md p-5 rounded-2xl border border-zinc-800/80 space-y-1 hover:-translate-y-0.5 transition-all duration-200 shadow-xl">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500">TV Serije</span>
+                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-400">TV Serije</span>
                       <Tv size={14} className="text-emerald-400" />
                     </div>
                     <p className="text-2xl sm:text-3.5xl font-black text-white font-mono leading-none">
                       {entries.filter(e => e.type === 'show').length}
                     </p>
-                    <p className="text-[9px] text-zinc-650 font-bold uppercase">Detaljne sezone</p>
+                    <p className="text-[9px] text-zinc-400 font-bold uppercase">Detaljne sezone</p>
                   </div>
 
                   {/* Stats Card: Universes */}
-                  <div className="bg-zinc-950 p-5 rounded-2xl border border-zinc-900 space-y-1">
+                  <div className="bg-zinc-900/60 backdrop-blur-md p-5 rounded-2xl border border-zinc-800/80 space-y-1 hover:-translate-y-0.5 transition-all duration-200 shadow-xl">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500">Univerzumi</span>
-                      <Star size={14} className="text-purple-400" />
+                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-400">Univerzumi</span>
+                      <Layers size={14} className="text-purple-400" />
                     </div>
                     <p className="text-2xl sm:text-3.5xl font-black text-white font-mono leading-none">
                       {entries.filter(e => e.type === 'universe').length}
                     </p>
-                    <p className="text-[9px] text-zinc-650 font-bold uppercase">Multifazni projekti</p>
+                    <p className="text-[9px] text-zinc-400 font-bold uppercase">Multifazni projekti</p>
                   </div>
 
                   {/* Stats Card: Highest Rated */}
-                  <div className="bg-zinc-950 p-5 rounded-2xl border border-zinc-900 space-y-1 flex flex-col justify-between min-h-[110px]">
+                  <div className="bg-zinc-900/60 backdrop-blur-md p-5 rounded-2xl border border-zinc-800/80 space-y-1 flex flex-col justify-between min-h-[110px] hover:-translate-y-0.5 transition-all duration-200 shadow-xl">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500">Najbolji Naslov</span>
+                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-400">Najbolji Naslov</span>
                       <Trophy size={14} className="text-yellow-400" />
                     </div>
                     {highestRatedEntry ? (
@@ -1666,12 +1825,12 @@ export default function App() {
                         <p className="text-xs font-black text-yellow-400 truncate leading-tight">
                           {highestRatedEntry.name}
                         </p>
-                        <p className="text-[10px] text-zinc-400 font-bold mt-1 flex items-center gap-1">
+                        <p className="text-[10px] text-zinc-300 font-bold mt-1 flex items-center gap-1">
                           ★ {calculateAverageRating(highestRatedEntry).toFixed(1)}/10
                         </p>
                       </div>
                     ) : (
-                      <p className="text-xs text-zinc-650 italic">Nema naslova</p>
+                      <p className="text-xs text-zinc-400 italic">Nema naslova</p>
                     )}
                   </div>
                 </div>
@@ -1680,57 +1839,54 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <button
                     onClick={() => setActiveTab('leaderboard')}
-                    className="p-4 rounded-2xl bg-zinc-900/30 hover:bg-zinc-900/60 border border-zinc-900 text-left transition-all active:scale-98 cursor-pointer flex items-center gap-4 group"
+                    className="p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-yellow-400/40 text-left hover:-translate-y-0.5 transition-all duration-200 active:scale-98 cursor-pointer flex items-center gap-4 group shadow-lg"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-yellow-400/10 flex items-center justify-center text-yellow-400 group-hover:bg-yellow-400/20 transition-all shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-yellow-400 group-hover:bg-yellow-400/20 transition-all shrink-0">
                       <Trophy size={18} />
                     </div>
                     <div className="min-w-0">
-                      <h4 className="text-xs font-black uppercase text-zinc-200 tracking-wider">Otvorite Rang Liste</h4>
-                      <p className="text-[10px] text-zinc-500 truncate mt-0.5">Glumačke postave i top performanse</p>
+                      <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Otvorite Rang Liste</h4>
+                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">Glumačke postave i top performanse</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('univerzumi')}
+                    className="p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-purple-400/40 text-left hover:-translate-y-0.5 transition-all duration-200 active:scale-98 cursor-pointer flex items-center gap-4 group shadow-lg"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-purple-400/10 border border-purple-400/20 flex items-center justify-center text-purple-400 group-hover:bg-purple-400/20 transition-all shrink-0">
+                      <Layers size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Cinematic Univerzumi</h4>
+                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">Hronologije i franšize faza</p>
                     </div>
                   </button>
 
                   <button
                     onClick={() => setActiveTab('glumci')}
-                    className="p-4 rounded-2xl bg-zinc-900/30 hover:bg-zinc-900/60 border border-zinc-900 text-left transition-all active:scale-98 cursor-pointer flex items-center gap-4 group"
+                    className="p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-emerald-400/40 text-left hover:-translate-y-0.5 transition-all duration-200 active:scale-98 cursor-pointer flex items-center gap-4 group shadow-lg"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-purple-400/10 flex items-center justify-center text-purple-400 group-hover:bg-purple-400/20 transition-all shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-400/10 border border-emerald-400/20 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-400/20 transition-all shrink-0">
                       <Users size={18} />
                     </div>
                     <div className="min-w-0">
-                      <h4 className="text-xs font-black uppercase text-zinc-200 tracking-wider">Centralna Baza Glumaca</h4>
-                      <p className="text-[10px] text-zinc-500 truncate mt-0.5">Biografije, galerije i uloge u projektima</p>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setExportInitialTab('json-backup');
-                      setIsExportModalOpen(true);
-                    }}
-                    className="p-4 rounded-2xl bg-zinc-900/30 hover:bg-zinc-900/60 border border-zinc-900 text-left transition-all active:scale-98 cursor-pointer flex items-center gap-4 group"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-emerald-400/10 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-400/20 transition-all shrink-0">
-                      <Database size={18} />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-black uppercase text-zinc-200 tracking-wider">Upravljanje JSON Bazom</h4>
-                      <p className="text-[10px] text-zinc-500 truncate mt-0.5">Kreirajte sigurnosne kopije ili uvezite podatke</p>
+                      <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Centralna Baza Glumaca</h4>
+                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">Biografije, galerije i uloge u projektima</p>
                     </div>
                   </button>
                 </div>
 
                 {/* THE VISUAL DIRECTORY / KATALOG */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                  <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
                     <div className="flex items-center gap-2">
                       <Film size={16} className="text-yellow-400" />
                       <h3 className="font-extrabold text-base text-zinc-100 uppercase tracking-wide">
                         Vaš Katalog Naslova ({entries.length})
                       </h3>
                     </div>
-                    <span className="text-[10px] text-zinc-500 font-mono font-bold uppercase tracking-wider">Kliknite za otvaranje detaljnog grafikona</span>
+                    <span className="text-[10px] text-zinc-400 font-mono font-bold uppercase tracking-wider">Kliknite za otvaranje detaljnog grafikona</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
@@ -1744,10 +1900,10 @@ export default function App() {
                             setActiveTab('katalog');
                             setSelectedActorName(null);
                           }}
-                          className="bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-yellow-400/35 rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] active:scale-98 group cursor-pointer shadow-lg flex flex-col h-full"
+                          className="bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-yellow-400/50 rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 active:scale-98 group cursor-pointer shadow-xl flex flex-col h-full"
                         >
                           {/* Poster thumbnail container */}
-                          <div className="relative aspect-[2/3] w-full bg-zinc-900 overflow-hidden shrink-0">
+                          <div className="relative aspect-[2/3] w-full bg-zinc-950 overflow-hidden shrink-0">
                             <img
                               src={e.posterUrl}
                               alt={e.name}
@@ -1766,7 +1922,7 @@ export default function App() {
                             </span>
 
                             {/* Average rating star badge */}
-                            <div className="absolute bottom-3 right-3 bg-zinc-950/90 border border-zinc-850 px-2 py-1 rounded-lg flex items-center gap-1 text-[10px] font-black text-yellow-400 font-mono shadow-md">
+                            <div className="absolute bottom-3 right-3 bg-zinc-950/90 border border-zinc-800 px-2 py-1 rounded-lg flex items-center gap-1 text-[10px] font-black text-yellow-400 font-mono shadow-md">
                               <Star size={10} className="fill-current" />
                               <span>{avgRating > 0 ? avgRating.toFixed(1) : '—'}</span>
                             </div>
@@ -1775,16 +1931,16 @@ export default function App() {
                           {/* Info section */}
                           <div className="p-4 flex flex-col justify-between flex-1 space-y-2">
                             <div>
-                              <p className="text-[10px] font-mono font-bold text-zinc-500">{e.year}</p>
+                              <p className="text-[10px] font-mono font-bold text-zinc-400">{e.year}</p>
                               <h4 className="font-extrabold text-xs sm:text-sm text-zinc-100 group-hover:text-yellow-400 transition-colors tracking-tight line-clamp-1 mt-0.5">
                                 {e.name}
                               </h4>
-                              <p className="text-[10px] text-zinc-400 line-clamp-2 mt-1 leading-relaxed">
+                              <p className="text-[10px] text-zinc-300 line-clamp-2 mt-1 leading-relaxed">
                                 {e.description}
                               </p>
                             </div>
                             
-                            <div className="pt-2 border-t border-zinc-900/50 flex items-center justify-between text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                            <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
                               <span>
                                 {e.type === 'show' 
                                   ? `${e.seasons?.length || 0} Sezona` 
@@ -1803,30 +1959,96 @@ export default function App() {
                     })}
                   </div>
                 </div>
-              </div>
+              </motion.div>
+            ) : activeTab === 'univerzumi' ? (
+              <motion.div
+                key="tab-univerzumi"
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <UniversesView
+                  entries={entries}
+                  onSelectUniverse={(univId) => {
+                    handleSelectEntry(univId);
+                    setActiveTab('katalog');
+                  }}
+                  onAddNewUniverse={() => setIsAddModalOpen(true)}
+                />
+              </motion.div>
             ) : activeTab === 'glumci' ? (
-              <ActorsView
-                entries={entries}
-                allActorsWithAppearances={allActorsWithAppearances}
-                selectedActorName={selectedActorName}
-                setSelectedActorName={setSelectedActorName}
-                onNavigateToEntry={(entryId, seasonNum, epNum) => {
-                  handleNavigateFromActorCatalog(entryId, seasonNum, epNum);
-                  setActiveTab('katalog');
-                }}
-                onUpdateActorGlobalDetails={handleUpdateActorGlobalDetails}
-                onUpdateActorAppearanceRating={handleUpdateActorAppearanceRating}
-              />
+              <motion.div
+                key="tab-glumci"
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <ActorsView
+                  entries={entries}
+                  allActorsWithAppearances={allActorsWithAppearances}
+                  selectedActorName={selectedActorName}
+                  setSelectedActorName={setSelectedActorName}
+                  onNavigateToEntry={(entryId, seasonNum, epNum) => {
+                    handleNavigateFromActorCatalog(entryId, seasonNum, epNum);
+                    setActiveTab('katalog');
+                  }}
+                  onUpdateActorGlobalDetails={handleUpdateActorGlobalDetails}
+                  onUpdateActorAppearanceRating={handleUpdateActorAppearanceRating}
+                />
+              </motion.div>
             ) : activeTab === 'leaderboard' ? (
-              <LeaderboardView
-                allActorsWithAppearances={allActorsWithAppearances}
-                onNavigateToActor={(actorName) => {
-                  setSelectedActorName(actorName);
-                  setActiveTab('glumci');
-                }}
-              />
+              <motion.div
+                key="tab-leaderboard"
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <LeaderboardView
+                  allActorsWithAppearances={allActorsWithAppearances}
+                  onNavigateToActor={(actorName) => {
+                    setSelectedActorName(actorName);
+                    setActiveTab('glumci');
+                  }}
+                />
+              </motion.div>
             ) : (
-              <>
+              <motion.div
+                key="tab-katalog"
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="space-y-6"
+              >
+                {/* TITLE SELECTOR CHIPS BAR FOR KATALOG */}
+                {entries.length > 0 && (
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400 shrink-0 pr-1">
+                      Izaberi naslov:
+                    </span>
+                    {entries.map(e => {
+                      const isSelected = e.id === activeEntry?.id;
+                      return (
+                        <button
+                          key={`katalog-chip-${e.id}`}
+                          onClick={() => handleSelectEntry(e.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 border ${
+                            isSelected
+                              ? 'bg-yellow-400 text-zinc-955 border-yellow-400 font-black shadow-[0_0_15px_rgba(250,204,21,0.25)]'
+                              : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-white'
+                          }`}
+                        >
+                          <span>{e.type === 'universe' ? '🌌' : e.type === 'movie' ? '🎬' : '📺'}</span>
+                          <span className="truncate max-w-[150px]">{e.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* FILTERS & SEARCH LINE */}
                 <section id="search-filter-controls" className="p-4 rounded-xl border transition-colors bg-zinc-900/30 border-zinc-900">
                   <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
@@ -2598,9 +2820,9 @@ export default function App() {
                 </div>
               )}
             </section>
-              </>
+              </motion.div>
             )}
-          </>
+          </AnimatePresence>
         )}
       </main>
 
@@ -2944,6 +3166,23 @@ export default function App() {
         }}
         recentContributions={recentContributions}
         isLoadingContributions={isContributionsLoading}
+        onUpdateProfile={handleProfileUpdate}
+        onSelectUser={handleOpenSocialProfile}
+      />
+
+      {/* SOCIAL COMMUNITY PROFILE VIEW MODAL */}
+      <UserProfileModal
+        user={null}
+        profile={selectedSocialProfile}
+        isOpen={isSocialProfileOpen}
+        onClose={() => {
+          setIsSocialProfileOpen(false);
+          setSelectedSocialProfile(null);
+        }}
+        isReadOnly={true}
+        recentContributions={socialContributions}
+        isLoadingContributions={isSocialContributionsLoading}
+        onSelectUser={handleOpenSocialProfile}
       />
 
       </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}

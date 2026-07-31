@@ -300,3 +300,110 @@ export function getShowDynamicColors(name: string): DynamicColorTheme {
   ];
   return palettes[index];
 }
+
+export interface ThemeAtmosphere {
+  gradientCss: string;
+  accentGlowColor: string;
+  primaryGlowColor: string;
+  badgeBorder: string;
+  posterBgUrl?: string;
+}
+
+export function getEntryAtmosphere(entry?: RatingEntry | null, activeTab: string = 'home'): ThemeAtmosphere {
+  if (activeTab === 'univerzumi') {
+    return {
+      gradientCss: 'from-purple-950/30 via-zinc-950 to-indigo-955/20',
+      accentGlowColor: 'rgba(147, 51, 234, 0.08)',
+      primaryGlowColor: 'rgba(79, 70, 229, 0.05)',
+      badgeBorder: 'border-purple-500/30 text-purple-300 bg-purple-500/10',
+      posterBgUrl: entry?.bannerUrl || entry?.posterUrl
+    };
+  }
+
+  if (activeTab === 'glumci') {
+    return {
+      gradientCss: 'from-emerald-950/20 via-zinc-950 to-teal-955/15',
+      accentGlowColor: 'rgba(16, 185, 129, 0.07)',
+      primaryGlowColor: 'rgba(20, 184, 166, 0.05)',
+      badgeBorder: 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10',
+    };
+  }
+
+  if (activeTab === 'leaderboard') {
+    return {
+      gradientCss: 'from-amber-950/20 via-zinc-950 to-yellow-955/15',
+      accentGlowColor: 'rgba(245, 158, 11, 0.08)',
+      primaryGlowColor: 'rgba(234, 179, 8, 0.05)',
+      badgeBorder: 'border-amber-500/30 text-amber-300 bg-amber-500/10',
+    };
+  }
+
+  if (!entry) {
+    return {
+      gradientCss: 'from-amber-950/15 via-zinc-950 to-purple-955/10',
+      accentGlowColor: 'rgba(250, 204, 21, 0.06)',
+      primaryGlowColor: 'rgba(168, 85, 247, 0.05)',
+      badgeBorder: 'border-yellow-400/30 text-yellow-300 bg-yellow-400/10',
+    };
+  }
+
+  const nameLower = entry.name.toLowerCase();
+
+  if (nameLower.includes('breaking bad') || nameLower.includes('better call saul')) {
+    return {
+      gradientCss: 'from-emerald-950/25 via-zinc-950 to-teal-955/15',
+      accentGlowColor: 'rgba(16, 185, 129, 0.09)',
+      primaryGlowColor: 'rgba(5, 150, 105, 0.06)',
+      badgeBorder: 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10',
+      posterBgUrl: entry.bannerUrl || entry.posterUrl
+    };
+  }
+
+  if (nameLower.includes('game of thrones') || nameLower.includes('house of the dragon')) {
+    return {
+      gradientCss: 'from-red-950/25 via-zinc-950 to-amber-955/15',
+      accentGlowColor: 'rgba(225, 29, 72, 0.09)',
+      primaryGlowColor: 'rgba(217, 119, 6, 0.06)',
+      badgeBorder: 'border-red-500/30 text-red-300 bg-red-500/10',
+      posterBgUrl: entry.bannerUrl || entry.posterUrl
+    };
+  }
+
+  if (nameLower.includes('marvel') || nameLower.includes('avengers') || nameLower.includes('star wars')) {
+    return {
+      gradientCss: 'from-purple-950/25 via-zinc-950 to-sky-955/15',
+      accentGlowColor: 'rgba(147, 51, 234, 0.09)',
+      primaryGlowColor: 'rgba(14, 165, 233, 0.06)',
+      badgeBorder: 'border-purple-500/30 text-purple-300 bg-purple-500/10',
+      posterBgUrl: entry.bannerUrl || entry.posterUrl
+    };
+  }
+
+  if (nameLower.includes('batman') || nameLower.includes('dark knight')) {
+    return {
+      gradientCss: 'from-slate-950 via-zinc-950 to-blue-955/20',
+      accentGlowColor: 'rgba(30, 58, 138, 0.12)',
+      primaryGlowColor: 'rgba(59, 130, 246, 0.06)',
+      badgeBorder: 'border-blue-500/30 text-blue-300 bg-blue-500/10',
+      posterBgUrl: entry.bannerUrl || entry.posterUrl
+    };
+  }
+
+  // Dynamic deterministic hashing for movie/show entry
+  let hash = 0;
+  const str = (entry.name + entry.id + (entry.type || '')).toLowerCase();
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue1 = Math.abs(hash % 360);
+  const hue2 = (hue1 + 40) % 360;
+
+  return {
+    gradientCss: `from-[hsl(${hue1},30%,6%)] via-zinc-950 to-[hsl(${hue2},25%,5%)]`,
+    accentGlowColor: `hsla(${hue1}, 60%, 35%, 0.08)`,
+    primaryGlowColor: `hsla(${hue2}, 55%, 30%, 0.05)`,
+    badgeBorder: `border-[hsl(${hue1},60%,50%)]/30 text-[hsl(${hue1},70%,70%)] bg-[hsl(${hue1},60%,50%)]/10`,
+    posterBgUrl: entry.bannerUrl || entry.posterUrl
+  };
+}
+

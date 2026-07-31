@@ -71,7 +71,7 @@ export default function RatingGrid({
   });
 
   return (
-    <div className="w-full bg-zinc-950 text-slate-100 rounded-2xl p-4 sm:p-6 border border-zinc-900 mt-6" id={`rating-grid-${entry.id}`}>
+    <div className="w-full bg-zinc-900/60 backdrop-blur-md text-slate-100 rounded-2xl p-4 sm:p-6 border border-zinc-800/80 shadow-2xl mt-6" id={`rating-grid-${entry.id}`}>
       {/* View Selectors */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-zinc-805 pb-4">
         <div className="flex items-center gap-3">
