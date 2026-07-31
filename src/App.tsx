@@ -35,10 +35,17 @@ import {
   ContributionLog, 
   UserProfile,
   updateUserProfile,
-  getUserProfile
+  getUserProfile,
+  getUserRole,
+  canEditDirectly,
+  canCreateContent,
+  submitPendingEntry,
+  UserRole
 } from './firebaseSync';
+import AdminPanel from './components/AdminPanel';
+import MigrationPrompt from './components/MigrationPrompt';
 
-import { Tv, Film, Plus, Search, User, Star, RotateCcw, Trash2, Play, Grid2x2 as GridIcon, Clock, Info, ChevronDown, ArrowUpDown, ChartBar as BarChart2, Download, CreditCard as Edit, X, Sparkles, Save, Check, Database, Users, Trophy, ChevronLeft, ChevronRight, Hop as Home, LogOut, RefreshCw, CircleAlert as AlertCircle, Layers, SlidersHorizontal, MoveVertical as MoreVertical, MessageSquare } from 'lucide-react';
+import { Tv, Film, Plus, Search, User, Star, RotateCcw, Trash2, Play, Grid2x2 as GridIcon, Clock, Info, ChevronDown, ArrowUpDown, ChartBar as BarChart2, Download, CreditCard as Edit, X, Sparkles, Save, Check, Database, Users, Trophy, ChevronLeft, ChevronRight, Hop as Home, LogOut, RefreshCw, CircleAlert as AlertCircle, Layers, SlidersHorizontal, MoveVertical as MoreVertical, MessageSquare, Crown, Lock } from 'lucide-react';
 
 export default function App() {
   // Cinematic Intro state
@@ -165,6 +172,17 @@ export default function App() {
   const [isSocialProfileOpen, setIsSocialProfileOpen] = useState(false);
   const [socialContributions, setSocialContributions] = useState<ContributionLog[]>([]);
   const [isSocialContributionsLoading, setIsSocialContributionsLoading] = useState(false);
+
+  // Admin Panel & Migration Prompt States
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [showMigrationPrompt, setShowMigrationPrompt] = useState(false);
+  const [showPendingToast, setShowPendingToast] = useState(false);
+
+  // Derived role helpers
+  const userRole: UserRole = getUserRole(userProfile);
+  const canCreate = canCreateContent(userProfile);
+  const canEdit = canEditDirectly(userProfile);
+  const isAdmin = userRole === 'admin';
 
   const handleProfileUpdate = async (updatedData: Partial<UserProfile>) => {
     if (!user) return;
@@ -339,64 +357,85 @@ export default function App() {
   // C. Synchronize local catalog edits automatically back to the universal Firestore collection
   useEffect(() => {
     if (!isLoaded || !isFirestoreSyncedRef.current) return;
-    
+
     const syncLocalChangesToFirestore = async () => {
       if (isApplyingSnapshotRef.current) {
-        // This state update came from Firestore, so we don't write it back
         isApplyingSnapshotRef.current = false;
         prevEntriesRef.current = entries;
         return;
       }
-      
-      // Compare entries with prevEntriesRef.current to find deleted or modified items
+
       const prevMap = new Map(prevEntriesRef.current.map(e => [e.id, e]));
       const currentMap = new Map(entries.map(e => [e.id, e]));
-      
+
+      // For regular users, route through pending submissions instead of direct writes
+      const usePending = userProfile && !canEditDirectly(userProfile);
+
       // 1. Find deleted entries
       for (const prevEntry of prevEntriesRef.current) {
         if (!currentMap.has(prevEntry.id)) {
-          console.log(`[Sync] Local deletion detected for: ${prevEntry.name}`);
-          try {
-            await deleteEntryFromFirestore(
-              prevEntry.id, 
-              prevEntry.name, 
-              user?.uid, 
-              userProfile?.displayName || user?.displayName || undefined,
-              userProfile?.photoURL || user?.photoURL || undefined
-            );
-          } catch (err) {
-            console.error(`Failed to sync deletion for ${prevEntry.name}:`, err);
+          if (usePending) {
+            try {
+              await submitPendingEntry(prevEntry, 'delete', userProfile!);
+              setShowPendingToast(true);
+              setTimeout(() => setShowPendingToast(false), 4000);
+            } catch (err) {
+              console.error(`Failed to submit pending deletion for ${prevEntry.name}:`, err);
+            }
+          } else {
+            console.log(`[Sync] Local deletion detected for: ${prevEntry.name}`);
+            try {
+              await deleteEntryFromFirestore(
+                prevEntry.id,
+                prevEntry.name,
+                user?.uid,
+                userProfile?.displayName || user?.displayName || undefined,
+                userProfile?.photoURL || user?.photoURL || undefined
+              );
+            } catch (err) {
+              console.error(`Failed to sync deletion for ${prevEntry.name}:`, err);
+            }
           }
         }
       }
-      
+
       // 2. Find added or modified entries
       for (const currentEntry of entries) {
         const prevEntry = prevMap.get(currentEntry.id);
         const isNew = !prevEntry;
         const isModified = prevEntry && JSON.stringify(prevEntry) !== JSON.stringify(currentEntry);
-        
-         if (isNew || isModified) {
-           console.log(`[Sync] Local ${isNew ? 'addition' : 'modification'} detected for: ${currentEntry.name}`);
-           try {
-             await saveEntryToFirestore(
-               currentEntry,
-               isNew ? 'add' : 'edit',
-               user?.uid,
-               userProfile?.displayName || user?.displayName || undefined,
-               userProfile?.photoURL || user?.photoURL || undefined
-             );
-           } catch (err) {
-             console.error(`Failed to sync ${isNew ? 'add' : 'edit'} for ${currentEntry.name}:`, err);
-           }
-         }
-       }
-       
-       prevEntriesRef.current = entries;
-     };
-     
-     syncLocalChangesToFirestore();
-   }, [entries, isLoaded, user, userProfile]);
+
+        if (isNew || isModified) {
+          if (usePending) {
+            try {
+              await submitPendingEntry(currentEntry, isNew ? 'add' : 'edit', userProfile!);
+              setShowPendingToast(true);
+              setTimeout(() => setShowPendingToast(false), 4000);
+            } catch (err) {
+              console.error(`Failed to submit pending ${isNew ? 'add' : 'edit'} for ${currentEntry.name}:`, err);
+            }
+          } else {
+            console.log(`[Sync] Local ${isNew ? 'addition' : 'modification'} detected for: ${currentEntry.name}`);
+            try {
+              await saveEntryToFirestore(
+                currentEntry,
+                isNew ? 'add' : 'edit',
+                user?.uid,
+                userProfile?.displayName || user?.displayName || undefined,
+                userProfile?.photoURL || user?.photoURL || undefined
+              );
+            } catch (err) {
+              console.error(`Failed to sync ${isNew ? 'add' : 'edit'} for ${currentEntry.name}:`, err);
+            }
+          }
+        }
+      }
+
+      prevEntriesRef.current = entries;
+    };
+
+    syncLocalChangesToFirestore();
+  }, [entries, isLoaded, user, userProfile]);
 
   // D. Load contributions history when user opens the profile view
   useEffect(() => {
@@ -415,6 +454,18 @@ export default function App() {
       loadContributions();
     }
   }, [isProfileOpen]);
+
+  // D2. Show migration prompt when a user logs in and has local data that hasn't been synced yet
+  const migrationPromptShown = useRef(false);
+  useEffect(() => {
+    if (userProfile && isLoaded && entries.length > 0 && !migrationPromptShown.current && !isFirestoreSyncedRef.current) {
+      migrationPromptShown.current = true;
+      const dismissed = localStorage.getItem('migration-prompt-dismissed');
+      if (!dismissed) {
+        setShowMigrationPrompt(true);
+      }
+    }
+  }, [userProfile, isLoaded, entries.length]);
 
   useEffect(() => {
     try {
@@ -1449,6 +1500,7 @@ export default function App() {
               </button>
 
               {/* PRIMARY ACTION: ADD NEW ENTRY (Sleek Icon-Only Plus Button) */}
+              {canCreate ? (
               <button
                 onClick={() => setIsAddModalOpen(true)}
                 id="btn-open-add-slate"
@@ -1457,6 +1509,18 @@ export default function App() {
               >
                 <Plus size={18} strokeWidth={3} />
               </button>
+              ) : null}
+
+              {/* ADMIN PANEL BUTTON - visible only to admin */}
+              {isAdmin && (
+                <button
+                  onClick={() => setIsAdminPanelOpen(true)}
+                  className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400/20 to-amber-500/20 hover:from-yellow-400/30 hover:to-amber-500/30 text-yellow-400 font-black rounded-xl border border-yellow-400/30 hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
+                  title="Admin Panel"
+                >
+                  <Crown size={16} />
+                </button>
+              )}
 
               {/* TOOLS DROPDOWN MENU */}
               <div className="relative">
@@ -1749,6 +1813,7 @@ export default function App() {
             <p className="text-zinc-300 text-xs sm:text-sm max-w-sm leading-relaxed">
               Dobrodošli u Cinema Grafik! Vaša baza ocjena je spremna. Započnite kreiranjem nove TV serije, filma ili Cinematic Universuma za praćenje i vizualizaciju.
             </p>
+            {canCreate ? (
             <button
               onClick={() => setIsAddModalOpen(true)}
               id="btn-add-first-title"
@@ -1756,6 +1821,7 @@ export default function App() {
             >
               <Plus size={16} strokeWidth={3} /> Dodaj Prvi Naslov
             </button>
+            ) : null}
           </div>
         ) : (
           <AnimatePresence mode="wait">
@@ -1786,12 +1852,14 @@ export default function App() {
                       </p>
                     </div>
                     <div className="shrink-0 flex flex-col sm:flex-row gap-3">
+                      {canCreate ? (
                       <button
                         onClick={() => setIsAddModalOpen(true)}
                         className="flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black px-5 py-3 rounded-2xl text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(250,204,21,0.25)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer"
                       >
                         <Plus size={15} strokeWidth={3} /> Dodaj Novi Naslov
                       </button>
+                      ) : null}
                       <button
                         onClick={() => setIsSurpriseOpen(true)}
                         className="flex items-center justify-center gap-2 bg-zinc-950/80 hover:bg-zinc-900 text-purple-300 border border-purple-500/40 px-5 py-3 rounded-2xl text-xs font-black tracking-wider uppercase hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
@@ -2059,7 +2127,7 @@ export default function App() {
                     handleSelectEntry(univId);
                     setActiveTab('katalog');
                   }}
-                  onAddNewUniverse={() => setIsAddModalOpen(true)}
+                  onAddNewUniverse={canCreate ? () => setIsAddModalOpen(true) : undefined}
                   onUpdateUniverse={(updatedUniverse) => {
                     setEntries(prev => prev.map(e => e.id === updatedUniverse.id ? updatedUniverse : e));
                   }}
@@ -2274,6 +2342,7 @@ export default function App() {
                         )}
 
                         {/* Edit Specifications Icon */}
+                        {canCreate && (
                         <button
                           onClick={() => setIsEditModalOpen(true)}
                           id="btn-edit-active-attributes"
@@ -2282,8 +2351,10 @@ export default function App() {
                         >
                           <Edit size={13} /> Uredi Detalje
                         </button>
+                        )}
 
                         {/* Delete this title icon */}
+                        {canCreate && (
                         <button
                           onClick={handleDeleteActiveEntry}
                           id="btn-delete-active-slate"
@@ -2292,6 +2363,7 @@ export default function App() {
                         >
                           <Trash2 size={13} /> Obriši Naslov
                         </button>
+                        )}
                       </div>
                     </div>
 
@@ -3278,6 +3350,44 @@ export default function App() {
 
       {/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}
       <VedoPhysicsOverlay isActive={isVedoMode} />
+
+      {/* ADMIN PANEL MODAL */}
+      {isAdminPanelOpen && isAdmin && (
+        <AdminPanel
+          currentUser={userProfile}
+          onClose={() => setIsAdminPanelOpen(false)}
+        />
+      )}
+
+      {/* MIGRATION PROMPT - show on first login with local data */}
+      {showMigrationPrompt && (
+        <MigrationPrompt
+          entries={entries}
+          onProceed={() => {
+            setShowMigrationPrompt(false);
+            localStorage.setItem('migration-prompt-dismissed', 'true');
+          }}
+          onSkip={() => {
+            setShowMigrationPrompt(false);
+            localStorage.setItem('migration-prompt-dismissed', 'true');
+          }}
+        />
+      )}
+
+      {/* PENDING SUBMISSION TOAST */}
+      <AnimatePresence>
+        {showPendingToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-sky-500 text-white font-black text-xs uppercase px-5 py-3 rounded-full shadow-2xl shadow-sky-500/30 pointer-events-none"
+          >
+            <Check size={14} strokeWidth={3} />
+            <span>Promjena poslana adminu na odobrenje!</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}
     </div>

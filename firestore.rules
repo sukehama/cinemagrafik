@@ -11,6 +11,19 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
+    
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'rogerstold@gmail.com';
+    }
+    
+    function isModerator() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'moderator';
+    }
+    
+    function isAdminOrModerator() {
+      return isAdmin() || isModerator();
+    }
 
     // 1. Validate RatingEntry Shape
     function isValidRatingEntry(data) {
@@ -32,15 +45,24 @@ service cloud.firestore {
     }
 
     // --- Core Catalog Entries ---
+    // Anyone can read the catalog. Only admins/moderators can write directly.
+    // Regular users submit via pending_submissions for admin review.
     match /entries/{entryId} {
-      allow read: if true; // Public catalog viewable by anyone
-      allow write: if isSignedIn() && isValidRatingEntry(request.resource.data);
+      allow read: if true;
+      allow create, update, delete: if isAdminOrModerator() && isValidRatingEntry(request.resource.data);
     }
 
     // --- Contributor Profiles ---
     match /users/{userId} {
       allow read: if true; // Publicly viewable stats/profiles
-      allow write: if isSignedIn() && userId == request.auth.uid && isValidUserProfile(request.resource.data);
+      // Users can write their own profile, but only admin can change role
+      allow write: if isSignedIn() && userId == request.auth.uid
+        && isValidUserProfile(request.resource.data)
+        && (request.resource.data.role is string
+            ? (request.resource.data.role == getResource().data.role || isAdmin())
+            : true);
+      // Admin can update any user (e.g. assign moderator role)
+      allow update: if isAdmin();
     }
 
     // --- Immutable Activity Contribution Logs ---
@@ -48,6 +70,14 @@ service cloud.firestore {
       allow read: if true; // Public activity feed
       allow create: if isSignedIn() && isValidContributionLog(request.resource.data);
       allow update, delete: if false; // Append-only historical entries
+    }
+
+    // --- Pending Submissions ---
+    // Authenticated users can submit. Only admin can read/approve/reject.
+    match /pending_submissions/{submissionId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
     }
   }
 }

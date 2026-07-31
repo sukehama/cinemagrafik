@@ -76,6 +76,8 @@ export interface ContributionLog {
   timestamp: string;
 }
 
+export type UserRole = 'admin' | 'moderator' | 'user' | 'guest';
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -86,9 +88,42 @@ export interface UserProfile {
   contributionsCount: number;
   bio?: string;
   bannerUrl?: string;
-  profileGradientStyle?: string; // 'classic' | 'cyberpunk' | 'sunset' | 'emerald' | 'cosmic' | 'gold'
+  profileGradientStyle?: string;
   statusText?: string;
   isOnline?: boolean;
+  role?: UserRole;
+}
+
+export interface PendingSubmission {
+  id: string;
+  entryId: string;
+  entryData: RatingEntry;
+  actionType: 'add' | 'edit' | 'delete';
+  submitterId: string;
+  submitterName: string;
+  submitterPhotoUrl: string;
+  submittedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedBy?: string;
+  reviewedAt?: string;
+}
+
+const ADMIN_EMAIL = 'rogerstold@gmail.com';
+
+export function getUserRole(profile: UserProfile | null): UserRole {
+  if (!profile) return 'guest';
+  if (profile.email?.toLowerCase() === ADMIN_EMAIL) return 'admin';
+  return profile.role || 'user';
+}
+
+export function canEditDirectly(profile: UserProfile | null): boolean {
+  const role = getUserRole(profile);
+  return role === 'admin' || role === 'moderator';
+}
+
+export function canCreateContent(profile: UserProfile | null): boolean {
+  const role = getUserRole(profile);
+  return role === 'admin' || role === 'moderator' || role === 'user';
 }
 
 /**
@@ -274,11 +309,12 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
 
   if (userSnap && userSnap.exists()) {
     const existingData = userSnap.data() as UserProfile;
-    // Update last active and set online - handle failures gracefully when offline
+    const resolvedRole: UserRole = (user.email || '').toLowerCase() === ADMIN_EMAIL ? 'admin' : (existingData.role || 'user');
     try {
       await updateDoc(userRef, {
         lastActive: timestamp,
         isOnline: true,
+        role: resolvedRole,
       });
     } catch (err) {
       console.warn('[Firebase Sync] Failed to update user online status in Firestore (offline):', err);
@@ -287,9 +323,11 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
       ...existingData,
       lastActive: timestamp,
       isOnline: true,
+      role: resolvedRole,
     };
   } else {
     // Create new profile with customizable default fields
+    const initialRole: UserRole = (user.email || '').toLowerCase() === ADMIN_EMAIL ? 'admin' : 'user';
     const newProfile: UserProfile = {
       uid: user.uid,
       displayName: user.displayName || user.email?.split('@')[0] || 'Korisnik',
@@ -302,7 +340,8 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
       profileGradientStyle: 'classic',
       statusText: 'Aktivan u katalogu',
       bannerUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=600&h=200&q=80',
-      isOnline: true
+      isOnline: true,
+      role: initialRole,
     };
     try {
       await setDoc(userRef, newProfile);
@@ -388,4 +427,89 @@ export async function fetchContributions(userId?: string): Promise<ContributionL
     console.error('[Firebase Sync] Failed to fetch contributions:', err);
     return [];
   }
+}
+
+// ===== Pending Submissions (for admin review) =====
+
+export async function submitPendingEntry(
+  entry: RatingEntry,
+  actionType: 'add' | 'edit' | 'delete',
+  profile: UserProfile
+): Promise<void> {
+  const pendingCol = collection(db, 'pending_submissions');
+  const submission: Omit<PendingSubmission, 'id'> = {
+    entryId: entry.id,
+    entryData: entry,
+    actionType,
+    submitterId: profile.uid,
+    submitterName: profile.displayName,
+    submitterPhotoUrl: profile.photoURL,
+    submittedAt: new Date().toISOString(),
+    status: 'pending',
+  };
+  await addDoc(pendingCol, submission as any);
+}
+
+export async function fetchPendingSubmissions(): Promise<PendingSubmission[]> {
+  try {
+    const pendingCol = collection(db, 'pending_submissions');
+    const q = query(pendingCol, where('status', '==', 'pending'), orderBy('submittedAt', 'desc'));
+    const snap = await getDocs(q);
+    const submissions: PendingSubmission[] = [];
+    snap.forEach((doc) => {
+      submissions.push({ id: doc.id, ...(doc.data() as any) } as PendingSubmission);
+    });
+    return submissions;
+  } catch (err) {
+    console.error('[Firebase Sync] Failed to fetch pending submissions:', err);
+    return [];
+  }
+}
+
+export async function approveSubmission(submission: PendingSubmission, reviewerId: string): Promise<void> {
+  const pendingRef = doc(db, 'pending_submissions', submission.id);
+  await updateDoc(pendingRef, {
+    status: 'approved',
+    reviewedBy: reviewerId,
+    reviewedAt: new Date().toISOString(),
+  });
+
+  if (submission.actionType === 'delete') {
+    await deleteDoc(doc(db, 'entries', submission.entryId));
+  } else {
+    await setDoc(doc(db, 'entries', submission.entryId), submission.entryData as any, { merge: true });
+  }
+}
+
+export async function rejectSubmission(submissionId: string, reviewerId: string): Promise<void> {
+  const pendingRef = doc(db, 'pending_submissions', submissionId);
+  await updateDoc(pendingRef, {
+    status: 'rejected',
+    reviewedBy: reviewerId,
+    reviewedAt: new Date().toISOString(),
+  });
+}
+
+export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
+  try {
+    const usersCol = collection(db, 'users');
+    const snap = await getDocs(usersCol);
+    const users: UserProfile[] = [];
+    const term = searchTerm.toLowerCase().trim();
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as UserProfile;
+      if (!term || data.displayName?.toLowerCase().includes(term) || data.email?.toLowerCase().includes(term)) {
+        users.push({ ...data, uid: docSnap.id });
+      }
+    });
+    return users;
+  } catch (err) {
+    console.error('[Firebase Sync] Failed to search users:', err);
+    return [];
+  }
+}
+
+export async function setUserRole(userId: string, role: UserRole): Promise<void> {
+  const userRef = doc(db, 'users', userId);
+  await updateDoc(userRef, { role });
 }
