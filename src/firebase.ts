@@ -4,6 +4,7 @@ import {
   GoogleAuthProvider, 
   signInWithPopup, 
   signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
   User
@@ -20,26 +21,14 @@ import {
   where,
   getDoc
 } from 'firebase/firestore';
-
-// Configuration loaded from firebase-applet-config.json
-const firebaseConfig = {
-  projectId: "gen-lang-client-0039667724",
-  appId: "1:376595157576:web:9b881157e8c1f8fb183e7d",
-  apiKey: "AIzaSyDxT9vEjwAwf40ld_o1ouJ5_7ltmugTxl0",
-  authDomain: "gen-lang-client-0039667724.firebaseapp.com",
-  firestoreDatabaseId: "ai-studio-showmovieratingg-c5439292-da9b-40b7-a36f-c30bf21f80a5",
-  storageBucket: "gen-lang-client-0039667724.firebasestorage.app",
-  messagingSenderId: "376595157576",
-  measurementId: "",
-  oAuthClientId: "376595157576-6j22lvg0ro7b5206r67pbctlfac0vvol.apps.googleusercontent.com"
-};
+import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// Initialize Auth and Firestore
+// Initialize Auth and Firestore with explicit databaseId
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Configure Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
@@ -51,17 +40,40 @@ googleProvider.setCustomParameters({
  * Handles signing in with Google.
  * Attempts popup first, and if blocked or in a sandboxed iframe, falls back to redirect.
  */
-export async function loginWithGoogle(): Promise<User> {
+export async function loginWithGoogle(): Promise<User | null> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error: any) {
     console.warn("Popup blocked or failed, attempting redirect login...", error);
-    // If we're in an iframe, popup might be blocked. Attempt redirect as fallback.
-    if (error.code === 'auth/popup-blocked' || error.code === 'auth/iframe-userAgent-to-be-careful' || error.message?.includes('iframe')) {
+    // If popup is closed by user or cancelled intentionally, don't trigger redirect
+    if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+      throw error;
+    }
+    // For popup blocked or iframe security restriction, fallback to redirect
+    if (
+      error.code === 'auth/popup-blocked' || 
+      error.code === 'auth/iframe-userAgent-to-be-careful' || 
+      error.message?.includes('iframe') ||
+      error.message?.includes('popup')
+    ) {
       await signInWithRedirect(auth, googleProvider);
+      return null;
     }
     throw error;
+  }
+}
+
+/**
+ * Checks for login redirect results when returning to app.
+ */
+export async function checkRedirectResult(): Promise<User | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    return result?.user || null;
+  } catch (err) {
+    console.error("Error processing login redirect result:", err);
+    return null;
   }
 }
 

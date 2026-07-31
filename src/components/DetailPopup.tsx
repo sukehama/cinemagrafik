@@ -699,14 +699,15 @@ export default function DetailPopup({
             </div>
           ) : (
             /* DYNAMIC HIGH-CONTRAST GRADIENT IMAGE COVER WITH DETAILS AND PLAY ACTION */
-            <div className="h-52 sm:h-64 bg-zinc-950 relative overflow-hidden flex items-end shrink-0 select-none">
+            <div className="h-56 sm:h-72 bg-zinc-950 relative overflow-hidden flex items-end shrink-0 select-none">
               <img
                 src={imageUrl || 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=800&auto=format&fit=crop&q=80'}
                 alt={name}
-                className="w-full h-full object-cover opacity-60 absolute inset-0"
+                className="w-full h-full object-cover opacity-50 absolute inset-0 scale-105 transition-transform duration-700"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/35 to-black/70 z-10" />
+              {/* Ultra smooth Netflix style gradient mask */}
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 via-zinc-950/40 to-black/70 z-10" />
               
               {/* Play Button Overlay if Youtube Trailer exists */}
               {embedUrl && (
@@ -718,10 +719,10 @@ export default function DetailPopup({
                       setShowTrailer(true);
                       setVideoStartTime(null);
                     }}
-                    className="bg-red-650 hover:bg-gradient-to-r hover:from-red-600 hover:to-red-700 hover:bg-red-650 border border-red-500/20 text-white p-4 rounded-full shadow-2xl cursor-pointer flex items-center justify-center"
+                    className="bg-red-600 hover:bg-red-500 border border-red-500/30 text-white p-4.5 rounded-full shadow-[0_0_30px_rgba(220,38,38,0.5)] cursor-pointer flex items-center justify-center backdrop-blur-sm"
                     title="Pokreni video isječak"
                   >
-                    <Play size={20} className="fill-white ml-0.5" />
+                    <Play size={22} className="fill-white ml-0.5" />
                   </motion.button>
                 </div>
               )}
@@ -760,7 +761,7 @@ export default function DetailPopup({
               <div className="absolute top-4 right-4 flex items-center gap-1.5 z-20">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="px-2.5 py-1.5 bg-zinc-950/80 hover:bg-zinc-900 text-yellow-500 border border-zinc-850 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                  className="px-2.5 py-1.5 bg-zinc-950/80 hover:bg-zinc-900 text-yellow-500 border border-zinc-850 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition active:scale-95 cursor-pointer backdrop-blur-md"
                 >
                   <Edit2 size={11} /> Uredi
                 </button>
@@ -788,7 +789,7 @@ export default function DetailPopup({
                   ) : (
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="p-1 px-2 bg-zinc-950/80 hover:bg-red-955 hover:text-red-400 text-zinc-400 border border-zinc-850 rounded-lg transition active:scale-95 cursor-pointer"
+                      className="p-1 px-2 bg-zinc-950/80 hover:bg-red-955 hover:text-red-400 text-zinc-400 border border-zinc-850 rounded-lg transition active:scale-95 cursor-pointer backdrop-blur-md"
                     >
                       <Trash2 size={11} />
                     </button>
@@ -797,27 +798,43 @@ export default function DetailPopup({
 
                 <button
                   onClick={onClose}
-                  className="text-zinc-400 hover:text-white bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-850 p-1.5 rounded-full transition cursor-pointer"
+                  className="text-zinc-400 hover:text-white bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-850 p-1.5 rounded-full transition cursor-pointer backdrop-blur-md"
                 >
                   <X size={13} />
                 </button>
               </div>
 
               {/* Title, ratings, episode info sitting directly overlayed with gradient inside the image */}
-              <div className="p-5 relative z-10 flex items-end justify-between w-full gap-4">
-                <div className="min-w-0">
-                  <span className="text-[10px] font-mono font-bold text-yellow-505 uppercase tracking-widest block drop-shadow-sm">
-                    Faza / Sezona {seasonNumber} • Stavka / Epizoda {episode.episodeNumber}
+              <div className="p-5 sm:p-6 relative z-10 flex flex-col justify-end w-full gap-2.5">
+                {/* Accent Season/Episode Tag Badge */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 font-mono text-[10px] font-black uppercase tracking-wider">
+                    S{seasonNumber < 10 ? `0${seasonNumber}` : seasonNumber}E{episode.episodeNumber < 10 ? `0${episode.episodeNumber}` : episode.episodeNumber} • Sezona {seasonNumber}, Epizoda {episode.episodeNumber}
                   </span>
-                  <h3 className="text-sm sm:text-base font-black text-white truncate drop-shadow-lg pr-2 mt-0.5">
-                    {name || 'Neimenovano'}
-                  </h3>
                 </div>
-                
-                {/* Visual Rating Indicator inside image cover */}
-                <div className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold font-mono text-xs shadow-lg uppercase tracking-wider border transition-colors ${getRatingColorClass(Number(rating))} border-zinc-800/40`}>
-                  <Star size={12} className="fill-current text-current" />
-                  <span>{Number(rating) === 0 ? 'N/A' : Number(rating).toFixed(1)}</span>
+
+                {/* Actual Episode Name (No Duplication) */}
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 w-full">
+                  <h3 className="text-base sm:text-2xl font-black text-white tracking-tight drop-shadow-xl pr-2">
+                    {name && !name.toLowerCase().startsWith('epizoda') ? name : (name || `Epizoda ${episode.episodeNumber}`)}
+                  </h3>
+                  
+                  {/* Metadata Row next to Rating Badge */}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {/* Visual Rating Indicator */}
+                    <div className={`flex items-center gap-1 px-3 py-1 rounded-xl font-black font-mono text-xs shadow-lg uppercase tracking-wider border transition-colors ${getRatingColorClass(Number(rating))} border-zinc-800/40`}>
+                      <Star size={12} className="fill-current text-current" />
+                      <span>{Number(rating) === 0 ? 'N/A' : Number(rating).toFixed(1)}</span>
+                    </div>
+
+                    {/* Metadata Pills */}
+                    <span className="px-2.5 py-1 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[10px] font-mono text-zinc-300 font-bold flex items-center gap-1">
+                      ⏱ 45 min
+                    </span>
+                    <span className="px-2.5 py-1 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[10px] font-mono text-zinc-300 font-bold flex items-center gap-1">
+                      📅 2024.
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1194,10 +1211,13 @@ export default function DetailPopup({
                 </div>
               )}
 
-              {/* Synopsis Segment */}
-              <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-900/40">
-                <span className="text-[9px] uppercase font-mono text-zinc-500 font-extrabold block mb-1">Sinopsis</span>
-                <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
+              {/* Synopsis Segment - Fluid Netflix Style */}
+              <div className="bg-zinc-900/40 p-4.5 rounded-2xl border border-zinc-800/40 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-widest">SINOPSIS</span>
+                  <div className="h-px flex-1 bg-gradient-to-r from-zinc-800/80 to-transparent" />
+                </div>
+                <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed font-normal tracking-wide">
                   {overview || "Nema unesenog opisa za ovu stavku. Da biste ga dodali, kliknite na 'Uredi' gore desno."}
                 </p>
               </div>

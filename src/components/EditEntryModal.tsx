@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { RatingEntry, Season } from '../types';
-import { X, Film, Tv, Save, Upload, Sparkles } from 'lucide-react';
+import { RatingEntry, Season, Actor } from '../types';
+import { X, Film, Tv, Save, Upload, Sparkles, UserPlus, Trash2, Users } from 'lucide-react';
 
 interface EditEntryModalProps {
   entry: RatingEntry;
   onClose: () => void;
   onSave: (updatedEntry: RatingEntry) => void;
+  allEntriesAvailable?: RatingEntry[];
 }
 
 const BANNER_PRESETS = [
@@ -16,7 +17,7 @@ const BANNER_PRESETS = [
   { name: 'Zalazak Sunca', banner: 'https://images.unsplash.com/photo-1501183007986-d0d080b147f9?w=1000&q=80', poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&q=80' }
 ];
 
-export default function EditEntryModal({ entry, onClose, onSave }: EditEntryModalProps) {
+export default function EditEntryModal({ entry, onClose, onSave, allEntriesAvailable = [] }: EditEntryModalProps) {
   const [name, setName] = useState(entry.name);
   const [year, setYear] = useState(entry.year);
   const [description, setDescription] = useState(entry.description);
@@ -29,6 +30,39 @@ export default function EditEntryModal({ entry, onClose, onSave }: EditEntryModa
   const [movieRating, setMovieRating] = useState(entry.movieRating ?? 8.0);
   const [movieDuration, setMovieDuration] = useState(entry.movieDuration ?? '');
   const [movieYoutubeUrl, setMovieYoutubeUrl] = useState(entry.movieYoutubeUrl ?? '');
+  const [movieActors, setMovieActors] = useState<Actor[]>(entry.movieActors || []);
+
+  // Actor creation state for movies
+  const [isAddingActor, setIsAddingActor] = useState(false);
+  const [newActorName, setNewActorName] = useState('');
+  const [newActorCharacter, setNewActorCharacter] = useState('');
+  const [newActorPhoto, setNewActorPhoto] = useState('');
+  const [newActorAge, setNewActorAge] = useState<string | number>('');
+  const [newActorBio, setNewActorBio] = useState('');
+  const [newActorOtherInfo, setNewActorOtherInfo] = useState('');
+
+  const getExistingActorsList = (): Actor[] => {
+    const actorMap = new Map<string, Actor>();
+    allEntriesAvailable.forEach(e => {
+      if (e.movieActors) {
+        e.movieActors.forEach(a => {
+          if (a && a.name) actorMap.set(a.name.toLowerCase().trim(), a);
+        });
+      }
+      if (e.seasons) {
+        e.seasons.forEach(s => {
+          s.episodes?.forEach(ep => {
+            ep.actors?.forEach(a => {
+              if (a && a.name) actorMap.set(a.name.toLowerCase().trim(), a);
+            });
+          });
+        });
+      }
+    });
+    return Array.from(actorMap.values());
+  };
+
+  const existingActors = getExistingActorsList();
 
   const handlePosterUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,6 +112,7 @@ export default function EditEntryModal({ entry, onClose, onSave }: EditEntryModa
       updated.movieRating = Number(movieRating);
       updated.movieDuration = movieDuration.trim() || undefined;
       updated.movieYoutubeUrl = movieYoutubeUrl.trim() || undefined;
+      updated.movieActors = movieActors;
     } else {
       updated.seasons = seasons;
     }
@@ -318,6 +353,176 @@ export default function EditEntryModal({ entry, onClose, onSave }: EditEntryModa
                   placeholder="https://www.youtube.com/watch?v=..."
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-zinc-100 placeholder-zinc-705 text-xs"
                 />
+              </div>
+
+              {/* Glumci filma section (with existing actor selector and custom creation) */}
+              <div className="border-t border-zinc-850 pt-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users size={14} className="text-purple-400" /> Glumci u ovom filmu ({movieActors.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingActor(!isAddingActor)}
+                    className="px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                  >
+                    <UserPlus size={12} /> {isAddingActor ? 'Zatvori' : 'Dodaj glumca'}
+                  </button>
+                </div>
+
+                {/* Form to add actor to movie */}
+                {isAddingActor && (
+                  <div className="bg-zinc-900 p-3.5 rounded-xl border border-purple-500/30 space-y-3">
+                    {/* Existing actor picker dropdown */}
+                    {existingActors.length > 0 && (
+                      <div className="bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 space-y-1">
+                        <label className="text-[10px] font-mono text-purple-300 font-bold uppercase block">
+                          ⚡ Izaberi postojećeg glumca iz baze:
+                        </label>
+                        <select
+                          onChange={(e) => {
+                            const actName = e.target.value;
+                            if (!actName) return;
+                            const found = existingActors.find(a => a.name === actName);
+                            if (found) {
+                              setNewActorName(found.name);
+                              setNewActorPhoto(found.photoUrl || '');
+                              setNewActorAge(found.age || '');
+                              setNewActorBio(found.bio || '');
+                              setNewActorOtherInfo(found.otherInfo || '');
+                            }
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-800 text-white text-xs p-2 rounded focus:outline-none"
+                        >
+                          <option value="">-- Odaberite iz postojeće baze --</option>
+                          {existingActors.map(a => (
+                            <option key={`ex-act-${a.name}`} value={a.name}>
+                              👤 {a.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-0.5">Ime glumca</label>
+                        <input
+                          type="text"
+                          value={newActorName}
+                          onChange={(e) => setNewActorName(e.target.value)}
+                          placeholder="Ime i prezime..."
+                          className="w-full bg-zinc-950 border border-zinc-800 text-xs p-2 rounded text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-0.5">Lik (Uloga)</label>
+                        <input
+                          type="text"
+                          value={newActorCharacter}
+                          onChange={(e) => setNewActorCharacter(e.target.value)}
+                          placeholder="Npr. Tony Stark"
+                          className="w-full bg-zinc-950 border border-zinc-800 text-xs p-2 rounded text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-0.5">Slika glumca (URL ili lokalni upload)</label>
+                      <input
+                        type="text"
+                        value={newActorPhoto}
+                        onChange={(e) => setNewActorPhoto(e.target.value)}
+                        placeholder="https://..."
+                        className="w-full bg-zinc-950 border border-zinc-800 text-xs p-2 rounded text-white"
+                      />
+                      <label className="mt-1 flex items-center justify-center gap-1.5 border border-dashed border-zinc-800 bg-zinc-950 px-2 py-1 rounded cursor-pointer text-center">
+                        <Upload size={11} className="text-zinc-500" />
+                        <span className="text-[9px] text-zinc-400 uppercase font-bold">Lokalna slika</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (typeof reader.result === 'string') setNewActorPhoto(reader.result);
+                              };
+                              reader.readAsDataURL(f);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="flex gap-2 justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!newActorName.trim()) return alert('Molimo unesite ime glumca!');
+                          const newAct: Actor = {
+                            id: `act-${Date.now()}-${Math.random().toString().slice(-4)}`,
+                            name: newActorName.trim(),
+                            characterName: newActorCharacter.trim() || undefined,
+                            photoUrl: newActorPhoto.trim() || undefined,
+                            age: newActorAge ? Number(newActorAge) : undefined,
+                            bio: newActorBio.trim() || undefined,
+                            otherInfo: newActorOtherInfo.trim() || undefined
+                          };
+                          setMovieActors([...movieActors, newAct]);
+                          setNewActorName('');
+                          setNewActorCharacter('');
+                          setNewActorPhoto('');
+                          setNewActorAge('');
+                          setNewActorBio('');
+                          setNewActorOtherInfo('');
+                          setIsAddingActor(false);
+                        }}
+                        className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-lg cursor-pointer"
+                      >
+                        Sačuvaj glumca
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* List of movie actors */}
+                {movieActors.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {movieActors.map((act, aIdx) => (
+                      <div key={`m-act-${act.id || aIdx}`} className="bg-zinc-900 border border-zinc-800 p-2 rounded-xl flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {act.photoUrl ? (
+                            <img src={act.photoUrl} alt={act.name} className="w-7 h-7 rounded-full object-cover shrink-0 border border-zinc-700" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-purple-950 text-purple-300 font-bold text-[10px] flex items-center justify-center shrink-0">
+                              {act.name.charAt(0)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-bold text-white truncate">{act.name}</div>
+                            {act.characterName && (
+                              <div className="text-[9px] text-zinc-400 truncate">{act.characterName}</div>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setMovieActors(movieActors.filter((_, idx) => idx !== aIdx))}
+                          className="p-1 text-zinc-500 hover:text-red-400 cursor-pointer"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-zinc-500 italic text-center py-2">
+                    Nema unesenih glumaca za ovaj film. Dodajte ih iznad.
+                  </p>
+                )}
               </div>
             </div>
           )}

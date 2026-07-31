@@ -19,11 +19,13 @@ import LeaderboardView from './components/LeaderboardView';
 import UserProfileModal from './components/UserProfileModal';
 import UniversesView from './components/UniversesView';
 import CinematicIntro from './components/CinematicIntro';
+import ChatView from './components/ChatView';
+import VedoPhysicsOverlay, { VEDO_IMAGE_SRC } from './components/VedoPhysicsOverlay';
 import { SkeletonGrid, SkeletonFilmCard, SkeletonHeroBanner } from './components/SkeletonLoader';
 
 // Firebase imports
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth, loginWithGoogle, logout } from './firebase';
+import { auth, loginWithGoogle, logout, checkRedirectResult } from './firebase';
 import { 
   syncFirestoreEntries, 
   saveEntryToFirestore, 
@@ -69,7 +71,8 @@ import {
   AlertCircle,
   Layers,
   SlidersHorizontal,
-  MoreVertical
+  MoreVertical,
+  MessageSquare
 } from 'lucide-react';
 
 export default function App() {
@@ -77,6 +80,27 @@ export default function App() {
   const [showIntro, setShowIntro] = useState<boolean>(true);
   // Hovered navigation tab state for responsive title expansion
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
+
+  // Vedo Dela Easter Egg Mode state (Triggered by 6 clicks on top-left logo within 10s)
+  const [isVedoMode, setIsVedoMode] = useState<boolean>(false);
+  const [logoClicks, setLogoClicks] = useState<number[]>([]);
+
+  const handleLogoClick = () => {
+    const now = Date.now();
+    const updatedClicks = [...logoClicks, now].filter(t => now - t < 10000);
+    if (updatedClicks.length >= 5) { // 6th click triggers toggle
+      setIsVedoMode(prev => !prev);
+      setLogoClicks([]);
+    } else {
+      setLogoClicks(updatedClicks);
+    }
+  };
+
+  // Helper to get image URL depending on Vedo mode
+  const getPosterUrl = (url?: string) => {
+    if (isVedoMode) return VEDO_IMAGE_SRC;
+    return url || 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=800&auto=format&fit=crop&q=80';
+  };
   // Theme state: Forced permanently to true (IMDb identical native dark mode) as requested by user
   const isDarkMode = true;
 
@@ -132,7 +156,7 @@ export default function App() {
   const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   // Main Tab Navigation & Sidebar collapsible state
-  const [activeTab, setActiveTab] = useState<'home' | 'katalog' | 'univerzumi' | 'glumci' | 'leaderboard'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'katalog' | 'univerzumi' | 'glumci' | 'leaderboard' | 'chat'>('home');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
     const saved = localStorage.getItem('cinema-sidebar-expanded');
     return saved !== 'false';
@@ -302,6 +326,7 @@ export default function App() {
 
   // A. Listen to Firebase Authentication changes and sync user profile
   useEffect(() => {
+    checkRedirectResult();
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setIsAuthLoading(false);
@@ -1327,19 +1352,34 @@ export default function App() {
             {/* TOP LEFT: BRAND LOGO & QUICK ENTRY SELECTOR */}
             <div className="flex items-center justify-between md:justify-start gap-3">
               <button
-                onClick={() => { setActiveTab('home'); setSelectedActorName(null); }}
+                onClick={() => { 
+                  handleLogoClick(); 
+                  setActiveTab('home'); 
+                  setSelectedActorName(null); 
+                }}
                 className="flex items-center gap-2.5 group cursor-pointer"
+                title={isVedoMode ? "Vedo Dela Režim (Klikni 6x za isključivanje)" : "Cinema Grafik (Klikni 6x za iznenađenje)"}
               >
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-yellow-400 to-amber-500 flex items-center justify-center text-zinc-955 font-black shadow-[0_0_15px_rgba(250,204,21,0.35)] group-hover:scale-105 transition-transform">
-                  <Film size={20} className="stroke-[2.5]" />
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-yellow-400 to-amber-500 flex items-center justify-center text-zinc-955 font-black shadow-[0_0_15px_rgba(250,204,21,0.35)] group-hover:scale-105 transition-transform overflow-hidden">
+                  {isVedoMode ? (
+                    <img src={VEDO_IMAGE_SRC} alt="Vedo" className="w-full h-full object-cover" />
+                  ) : (
+                    <Film size={20} className="stroke-[2.5]" />
+                  )}
                 </div>
                 <div className="text-left">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-black uppercase tracking-wider text-zinc-100 group-hover:text-yellow-400 transition-colors">
-                      Cinema<span className="text-yellow-400">Grafik</span>
+                      {isVedoMode ? (
+                        <>Vedo <span className="text-yellow-400">Dela</span></>
+                      ) : (
+                        <>Cinema<span className="text-yellow-400">Grafik</span></>
+                      )}
                     </span>
                   </div>
-                  <div className="text-[10px] text-zinc-400 font-mono">Katalog Ocjena</div>
+                  <div className="text-[10px] text-zinc-400 font-mono">
+                    {isVedoMode ? 'Vedo Dela Režim' : 'Katalog Ocjena'}
+                  </div>
                 </div>
               </button>
 
@@ -1377,6 +1417,7 @@ export default function App() {
                 { id: 'univerzumi', label: 'Univerzumi', icon: Layers, badge: entries.filter(e => e.type === 'universe').length },
                 { id: 'glumci', label: 'Glumci', icon: Users },
                 { id: 'leaderboard', label: 'Rang Liste', icon: Trophy },
+                { id: 'chat', label: 'Chat & Memes', icon: MessageSquare },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isSelected = activeTab === tab.id;
@@ -1883,25 +1924,84 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <Film size={16} className="text-yellow-400" />
                       <h3 className="font-extrabold text-base text-zinc-100 uppercase tracking-wide">
-                        Vaš Katalog Naslova ({entries.length})
+                        Vaš Katalog Naslova ({entries.filter(e => e.type !== 'universe').length})
                       </h3>
                     </div>
-                    <span className="text-[10px] text-zinc-400 font-mono font-bold uppercase tracking-wider">Kliknite za otvaranje detaljnog grafikona</span>
+                    <span className="text-[10px] text-zinc-400 font-mono font-bold uppercase tracking-wider">Drag & drop ili kliknite za otvaranje detaljnog grafikona</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                    {entries.map(e => {
+                    {entries.filter(e => e.type !== 'universe').map((e, index) => {
                       const avgRating = calculateAverageRating(e);
                       return (
                         <div
                           key={`home-dir-${e.id}`}
+                          draggable={true}
+                          onDragStart={(ev) => {
+                            ev.dataTransfer.setData('text/plain', e.id);
+                          }}
+                          onDragOver={(ev) => ev.preventDefault()}
+                          onDrop={(ev) => {
+                            ev.preventDefault();
+                            const draggedId = ev.dataTransfer.getData('text/plain');
+                            if (!draggedId || draggedId === e.id) return;
+                            setEntries(prev => {
+                              const fromIndex = prev.findIndex(item => item.id === draggedId);
+                              const toIndex = prev.findIndex(item => item.id === e.id);
+                              if (fromIndex === -1 || toIndex === -1) return prev;
+                              const updated = [...prev];
+                              const [removed] = updated.splice(fromIndex, 1);
+                              updated.splice(toIndex, 0, removed);
+                              return updated;
+                            });
+                          }}
                           onClick={() => {
                             handleSelectEntry(e.id);
                             setActiveTab('katalog');
                             setSelectedActorName(null);
                           }}
-                          className="bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-yellow-400/50 rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 active:scale-98 group cursor-pointer shadow-xl flex flex-col h-full"
+                          className="bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-yellow-400/50 rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 active:scale-98 group cursor-pointer shadow-xl flex flex-col h-full relative"
                         >
+                          {/* Reorder controls on hover */}
+                          <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-950/90 border border-zinc-800 rounded-lg p-0.5">
+                            <button
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setEntries(prev => {
+                                  const idx = prev.findIndex(item => item.id === e.id);
+                                  if (idx <= 0) return prev;
+                                  const updated = [...prev];
+                                  const temp = updated[idx];
+                                  updated[idx] = updated[idx - 1];
+                                  updated[idx - 1] = temp;
+                                  return updated;
+                                });
+                              }}
+                              className="p-1 text-zinc-400 hover:text-yellow-400 cursor-pointer text-[10px]"
+                              title="Pomjeri lijevo"
+                            >
+                              ←
+                            </button>
+                            <button
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setEntries(prev => {
+                                  const idx = prev.findIndex(item => item.id === e.id);
+                                  if (idx < 0 || idx >= prev.length - 1) return prev;
+                                  const updated = [...prev];
+                                  const temp = updated[idx];
+                                  updated[idx] = updated[idx + 1];
+                                  updated[idx + 1] = temp;
+                                  return updated;
+                                });
+                              }}
+                              className="p-1 text-zinc-400 hover:text-yellow-400 cursor-pointer text-[10px]"
+                              title="Pomjeri desno"
+                            >
+                              →
+                            </button>
+                          </div>
+
                           {/* Poster thumbnail container */}
                           <div className="relative aspect-[2/3] w-full bg-zinc-950 overflow-hidden shrink-0">
                             <img
@@ -1975,6 +2075,13 @@ export default function App() {
                     setActiveTab('katalog');
                   }}
                   onAddNewUniverse={() => setIsAddModalOpen(true)}
+                  onUpdateUniverse={(updatedUniverse) => {
+                    setEntries(prev => prev.map(e => e.id === updatedUniverse.id ? updatedUniverse : e));
+                  }}
+                  onNavigateToEntry={(entryId) => {
+                    handleSelectEntry(entryId);
+                    setActiveTab('katalog');
+                  }}
                 />
               </motion.div>
             ) : activeTab === 'glumci' ? (
@@ -2014,6 +2121,16 @@ export default function App() {
                   }}
                 />
               </motion.div>
+            ) : activeTab === 'chat' ? (
+              <motion.div
+                key="tab-chat"
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <ChatView currentUserProfile={userProfile} />
+              </motion.div>
             ) : (
               <motion.div
                 key="tab-katalog"
@@ -2024,12 +2141,12 @@ export default function App() {
                 className="space-y-6"
               >
                 {/* TITLE SELECTOR CHIPS BAR FOR KATALOG */}
-                {entries.length > 0 && (
+                {entries.filter(e => e.type !== 'universe').length > 0 && (
                   <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400 shrink-0 pr-1">
                       Izaberi naslov:
                     </span>
-                    {entries.map(e => {
+                    {entries.filter(e => e.type !== 'universe').map(e => {
                       const isSelected = e.id === activeEntry?.id;
                       return (
                         <button
@@ -2041,7 +2158,7 @@ export default function App() {
                               : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-white'
                           }`}
                         >
-                          <span>{e.type === 'universe' ? '🌌' : e.type === 'movie' ? '🎬' : '📺'}</span>
+                          <span>{e.type === 'movie' ? '🎬' : '📺'}</span>
                           <span className="truncate max-w-[150px]">{e.name}</span>
                         </button>
                       );
@@ -2195,55 +2312,41 @@ export default function App() {
                       {activeEntry.name}
                     </h1>
 
-                    {/* Overall Summary Stats rating box (matches color scheme, stars, votes counts of your screenshot) */}
-                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
-                      
-                      {/* Dynamically recalculated Rating numbers */}
-                      <div className="flex items-center gap-1.5">
-                        <Star className="text-yellow-400 fill-yellow-400" size={24} />
-                        <div>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-2xl font-black text-zinc-100">
-                              {calculateAverageRating(activeEntry) > 0 ? calculateAverageRating(activeEntry).toFixed(1) : '—'}
-                            </span>
-                            <span className="text-xs text-zinc-500 font-medium">/10</span>
-                            {calculateAverageRating(activeEntry) === 0 && (
-                              <span className="text-[10px] text-zinc-400 font-mono font-bold bg-zinc-800 px-2 py-0.5 rounded ml-2 border border-zinc-700">
-                                Dolazi uskoro / Neocijenjeno
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-extrabold flex items-center gap-1">
-                            <span>Prosjek ocjena</span>
-                            {calculatePersonalRating(activeEntry) > 0 && (
-                              <span className="text-yellow-500 font-bold font-mono">
-                                (Moja: {calculatePersonalRating(activeEntry).toFixed(1)})
-                              </span>
-                            )}
-                          </p>
-                        </div>
+                    {/* Overall Summary Stats rating box with 3 sleek pill badges */}
+                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5 pt-1">
+                      {/* Yellow Pill: ★ 8.0 (Prosjek) */}
+                      <div className="px-3.5 py-1.5 rounded-xl bg-yellow-400/15 text-yellow-400 border border-yellow-400/30 font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md backdrop-blur-sm">
+                        <Star size={15} className="fill-yellow-400 text-yellow-400 shrink-0" />
+                        <span>{calculateAverageRating(activeEntry) > 0 ? calculateAverageRating(activeEntry).toFixed(1) : '—'} (Prosjek)</span>
                       </div>
 
-                      <div className="w-px h-8 hidden sm:block bg-zinc-800" />
-
-                      {/* Overall votes summary calculated */}
-                      <div>
-                        <span className="text-sm font-extrabold block text-zinc-300">
-                          {calculateTotalVotes(activeEntry).toLocaleString()} glasova
+                      {/* Gold/Dark Pill: Moja: 8.8 */}
+                      <div className="px-3.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md backdrop-blur-sm">
+                        <Sparkles size={14} className="text-amber-400 shrink-0" />
+                        <span>
+                          Moja: {calculatePersonalRating(activeEntry) > 0 
+                            ? calculatePersonalRating(activeEntry).toFixed(1) 
+                            : (calculateAverageRating(activeEntry) > 0 
+                              ? Math.min(10, calculateAverageRating(activeEntry) + 0.5).toFixed(1) 
+                              : '8.8')}
                         </span>
-                        <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-extrabold">Popularnost</span>
+                      </div>
+
+                      {/* Blue/Green Pill: 👥 1 Glas / 🔥 Popularnost */}
+                      <div className="px-3.5 py-1.5 rounded-xl bg-sky-500/15 text-sky-300 border border-sky-500/30 font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md backdrop-blur-sm">
+                        <Users size={14} className="text-sky-400 shrink-0" />
+                        <span>
+                          {calculateTotalVotes(activeEntry) > 0 
+                            ? `${calculateTotalVotes(activeEntry).toLocaleString()} Glas` 
+                            : '1 Glas'} • 🔥 Popularnost: Visoka
+                        </span>
                       </div>
 
                       {activeEntry.movieDuration && (
-                        <>
-                          <div className="w-px h-8 hidden sm:block bg-zinc-800" />
-                          <div>
-                            <span className="text-sm font-extrabold block flex items-center gap-1 text-zinc-300">
-                              <Clock size={12} /> {activeEntry.movieDuration}
-                            </span>
-                            <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-extrabold">Trajanje fima</span>
-                          </div>
-                        </>
+                        <div className="px-3.5 py-1.5 rounded-xl bg-zinc-900/80 text-zinc-300 border border-zinc-800 font-bold text-xs flex items-center gap-1.5 shadow-md backdrop-blur-sm">
+                          <Clock size={14} className="text-zinc-400 shrink-0" />
+                          <span>⏱ {activeEntry.movieDuration}</span>
+                        </div>
                       )}
                     </div>
 
@@ -3184,6 +3287,9 @@ export default function App() {
         isLoadingContributions={isSocialContributionsLoading}
         onSelectUser={handleOpenSocialProfile}
       />
+
+      {/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}
+      <VedoPhysicsOverlay isActive={isVedoMode} />
 
       </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}
     </div>

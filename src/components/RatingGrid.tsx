@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { RatingEntry, Episode } from '../types';
 import { getRatingColorClass } from '../utils';
-import { Grid, Layers, Plus, TrendingUp, Edit } from 'lucide-react';
+import { Grid, Layers, Plus, TrendingUp, Edit, Edit2, Trash2 } from 'lucide-react';
 
 interface RatingGridProps {
   entry: RatingEntry;
@@ -71,7 +71,10 @@ export default function RatingGrid({
   });
 
   return (
-    <div className="w-full bg-zinc-900/60 backdrop-blur-md text-slate-100 rounded-2xl p-4 sm:p-6 border border-zinc-800/80 shadow-2xl mt-6" id={`rating-grid-${entry.id}`}>
+    <div className="w-full bg-zinc-950/40 backdrop-blur-xl text-slate-100 rounded-3xl p-4 sm:p-7 border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] mt-6 relative overflow-hidden" id={`rating-grid-${entry.id}`}>
+      {/* Liquid glass light highlight effect */}
+      <div className="absolute -top-24 -left-24 w-72 h-72 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none" />
       {/* View Selectors */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-zinc-805 pb-4">
         <div className="flex items-center gap-3">
@@ -134,12 +137,11 @@ export default function RatingGrid({
             <div className="grid gap-2 mb-3 items-center text-center" style={{ gridTemplateColumns: `3.5rem repeat(${seasons.length || 1}, minmax(3.5rem, 1fr))` }}>
               <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest text-left pl-1 font-mono">
                 {entry.type === 'universe' ? 'ST' : 'EP'}
-              </span>
-              {seasons.map(s => (
-                <div key={`col-sh-${s.seasonNumber}`} className="flex flex-col items-center justify-center relative min-h-[4.2rem] px-1">
+              </span>              {seasons.map(s => (
+                <div key={`col-sh-${s.seasonNumber}`} className="group flex flex-col items-center justify-center relative min-h-[4.2rem] px-1">
                   {editingSeasonNum === s.seasonNumber ? (
-                    <div className="flex flex-col items-center gap-1 bg-zinc-900 px-2 py-1.5 rounded-xl border border-zinc-800 absolute z-10 w-28 shadow-xl top-0">
-                      <span className="text-[9px] uppercase font-bold text-zinc-400">
+                    <div className="flex flex-col items-center gap-1 bg-zinc-900 px-2.5 py-2 rounded-2xl border border-zinc-800 absolute z-20 w-32 shadow-2xl top-0 backdrop-blur-xl">
+                      <span className="text-[9px] uppercase font-mono font-black text-zinc-400">
                         {entry.type === 'universe' ? `Vel.:` : `S${s.seasonNumber} Ep:`}
                       </span>
                       <input
@@ -148,7 +150,7 @@ export default function RatingGrid({
                         max={35}
                         value={customEpValue}
                         onChange={e => setCustomEpValue(Math.max(1, Number(e.target.value)))}
-                        className="w-12 bg-zinc-950 text-yellow-450 font-mono text-center font-bold text-xs rounded border border-zinc-800 px-1 py-0.5 focus:outline-none"
+                        className="w-14 bg-zinc-950 text-yellow-400 font-mono text-center font-bold text-xs rounded-lg border border-zinc-800 px-1.5 py-1 focus:outline-none"
                       />
                       <div className="flex gap-1">
                         <button
@@ -159,14 +161,14 @@ export default function RatingGrid({
                             }
                             setEditingSeasonNum(null);
                           }}
-                          className="px-1.5 py-0.5 bg-yellow-405 hover:bg-yellow-500 text-zinc-950 font-black rounded text-[9px] uppercase cursor-pointer"
+                          className="px-2 py-0.5 bg-yellow-400 hover:bg-yellow-300 text-zinc-955 font-black rounded-md text-[9px] uppercase cursor-pointer"
                         >
-                          Postavi
+                          Snimi
                         </button>
                         <button
                           type="button"
                           onClick={() => setEditingSeasonNum(null)}
-                          className="px-1.5 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-350 rounded text-[9px] cursor-pointer"
+                          className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md text-[9px] cursor-pointer"
                         >
                           X
                         </button>
@@ -174,26 +176,28 @@ export default function RatingGrid({
                     </div>
                   ) : (
                     <>
-                      <span className="text-[10px] sm:text-xs font-extrabold text-zinc-200 tracking-wider truncate max-w-full block" title={s.seasonName || `S${s.seasonNumber}`}>
+                      <span className="text-[10px] sm:text-xs font-black text-zinc-200 tracking-wider truncate max-w-full block" title={s.seasonName || `S${s.seasonNumber}`}>
                         {entry.type === 'universe' ? (s.seasonName || `Faza ${s.seasonNumber}`) : (s.seasonName || `Sezona ${s.seasonNumber}`)}
                       </span>
-                      <div className="flex items-center gap-1 mt-0.5 shrink-0">
+
+                      {/* Hover Season Control Icons */}
+                      <div className="flex items-center gap-1 mt-1 opacity-70 group-hover:opacity-100 transition-opacity bg-zinc-900/90 px-1.5 py-0.5 rounded-lg border border-zinc-800/80 shadow-md">
                         <button
                           onClick={() => onAddEpisodeToSeason(s.seasonNumber)}
-                          className="px-1 py-0.5 text-[8px] font-bold text-emerald-400 hover:bg-zinc-900 rounded transition-colors cursor-pointer border border-zinc-800/40"
+                          className="p-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 rounded transition-all cursor-pointer"
                           title={entry.type === 'universe' ? "Dodaj stavku" : "Dodaj epizodu"}
                         >
-                          +St
+                          <Plus size={11} strokeWidth={2.5} />
                         </button>
                         <button
                           onClick={() => {
                             setCustomEpValue((s.episodes || []).length);
                             setEditingSeasonNum(s.seasonNumber);
                           }}
-                          className="px-1 py-0.5 text-[8px] font-bold text-yellow-405 hover:bg-zinc-900 rounded transition-colors cursor-pointer border border-zinc-800/40"
-                          title="Promijeni broj stavki"
+                          className="p-1 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-950/40 rounded transition-all cursor-pointer"
+                          title="Promijeni broj epizoda / naslov"
                         >
-                          Vel
+                          <Edit2 size={11} strokeWidth={2.5} />
                         </button>
                         <button
                           onClick={() => {
@@ -201,10 +205,10 @@ export default function RatingGrid({
                               onDeleteSeason?.(s.seasonNumber);
                             }
                           }}
-                          className="px-1 py-0.5 text-[8px] font-bold text-red-450 hover:bg-red-950/20 rounded transition-colors cursor-pointer border border-red-900/30"
+                          className="p-1 text-red-400 hover:text-red-300 hover:bg-red-955/40 rounded transition-all cursor-pointer"
                           title={entry.type === 'universe' ? "Obriši fazu" : "Obriši sezonu"}
                         >
-                          Briši
+                          <Trash2 size={11} strokeWidth={2.5} />
                         </button>
                       </div>
                     </>
@@ -218,7 +222,7 @@ export default function RatingGrid({
               {Array.from({ length: maxEpisodes }).map((_, epIndex) => {
                 const epNum = epIndex + 1;
                 return (
-                  <div key={`row-ep-${epNum}`} className="grid gap-2 items-center text-center" style={{ gridTemplateColumns: `3.5rem repeat(${seasons.length || 1}, minmax(3rem, 1fr))` }}>
+                  <div key={`row-ep-${epNum}`} className="grid gap-2 items-center text-center" style={{ gridTemplateColumns: `3.5rem repeat(${seasons.length || 1}, minmax(3.5rem, 1fr))` }}>
                     {/* Index label (E1, E2, ...) */}
                     <span className="text-xs font-mono font-bold text-zinc-500 text-left pl-1">E{epNum}</span>
                     
@@ -230,24 +234,49 @@ export default function RatingGrid({
                         return (
                           <div
                             key={`cell-${s.seasonNumber}-${epNum}`}
-                            className="h-11 rounded-lg border border-zinc-900 bg-zinc-950/20 flex items-center justify-center text-zinc-700 text-xs font-mono"
+                            className="h-8 sm:h-9 rounded-xl border border-zinc-900/60 bg-zinc-950/20 flex items-center justify-center text-zinc-700 text-[10px] font-mono"
                           >
                             -
                           </div>
                         );
                       }
                       
+                      const epLabel = `E${epNum < 10 ? `0${epNum}` : epNum}`;
+                      const epTitle = episode.name || `Epizoda ${epNum}`;
+                      const isSlim = seasons.length <= 2;
+
                       return (
-                        <motion.button
-                          key={`cell-${s.seasonNumber}-${epNum}`}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => onEpisodeClick(s.seasonNumber, episode)}
-                          id={`episode-cell-s${s.seasonNumber}e${epNum}`}
-                          className={`h-11 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer font-sans font-extrabold ${getRatingColorClass(episode.rating)}`}
-                        >
-                          <span className="text-sm tracking-tighter">{episode.rating.toFixed(1)}</span>
-                        </motion.button>
+                        <div key={`cell-${s.seasonNumber}-${epNum}`} className="relative group z-10 hover:z-30">
+                          <motion.button
+                            whileHover={{ scale: 1.08 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => onEpisodeClick(s.seasonNumber, episode)}
+                            id={`episode-cell-s${s.seasonNumber}e${epNum}`}
+                            className={`w-full ${isSlim ? 'h-7 sm:h-7.5 max-w-[4.2rem] text-[11px]' : 'h-8 sm:h-9 text-[11px] sm:text-xs'} mx-auto rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer font-mono font-black shadow-md group-hover:shadow-[0_0_15px_rgba(250,204,21,0.3)] border border-white/5 ${getRatingColorClass(episode.rating)}`}
+                          >
+                            <span>{episode.rating.toFixed(1)}</span>
+                          </motion.button>
+
+                          {/* Hover Tooltip Card showing Episode Title & Synopsis */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-3 bg-zinc-950/95 border border-zinc-800 rounded-2xl shadow-2xl backdrop-blur-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-50 transform group-hover:-translate-y-1 text-left">
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <span className="text-[10px] font-mono font-black text-yellow-400 uppercase tracking-wider">
+                                S{s.seasonNumber < 10 ? `0${s.seasonNumber}` : s.seasonNumber}{epLabel}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-[10px] font-black text-zinc-300">
+                                ★ {episode.rating.toFixed(1)}
+                              </span>
+                            </div>
+                            <div className="text-xs font-black text-white line-clamp-1">
+                              {epTitle}
+                            </div>
+                            {episode.overview && (
+                              <p className="text-[10px] text-zinc-300 line-clamp-2 mt-1 leading-normal font-normal">
+                                {episode.overview}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -273,17 +302,17 @@ export default function RatingGrid({
             {/* Rows: Each row is a Season */}
             {seasons.map(s => (
               <div key={`row-seas-${s.seasonNumber}`} className="grid gap-2 items-center text-center" style={{ gridTemplateColumns: `3.5rem repeat(${maxEpisodes || 1}, minmax(3.5rem, 1fr))` }}>
-                <div className="flex flex-col items-start pl-1 text-left min-w-[3.5rem] relative">
+                <div className="flex flex-col items-start pl-1 text-left min-w-[3.5rem] relative group">
                   {editingSeasonNum === s.seasonNumber ? (
-                    <div className="flex flex-col items-center gap-1 bg-zinc-900 p-2 rounded-xl border border-zinc-800 absolute z-10 w-28 shadow-xl left-0 top-0">
-                      <span className="text-[8px] uppercase font-black text-zinc-400">Izmjena:</span>
+                    <div className="flex flex-col items-center gap-1 bg-zinc-900 p-2.5 rounded-2xl border border-zinc-800 absolute z-20 w-32 shadow-2xl left-0 top-0 backdrop-blur-xl">
+                      <span className="text-[9px] uppercase font-mono font-black text-zinc-400">Izmjena:</span>
                       <input
                         type="number"
                         min={1}
                         max={35}
                         value={customEpValue}
                         onChange={e => setCustomEpValue(Math.max(1, Number(e.target.value)))}
-                        className="w-12 bg-zinc-950 text-yellow-405 font-mono text-center font-bold text-xs rounded border border-zinc-800 px-1 py-0.5 focus:outline-none"
+                        className="w-14 bg-zinc-950 text-yellow-400 font-mono text-center font-bold text-xs rounded-lg border border-zinc-800 px-1.5 py-1 focus:outline-none"
                       />
                       <div className="flex gap-1">
                         <button
@@ -294,14 +323,14 @@ export default function RatingGrid({
                             }
                             setEditingSeasonNum(null);
                           }}
-                          className="px-1.5 py-0.5 bg-yellow-405 hover:bg-yellow-500 text-zinc-950 font-black rounded text-[8px] uppercase cursor-pointer"
+                          className="px-2 py-0.5 bg-yellow-400 hover:bg-yellow-300 text-zinc-955 font-black rounded-md text-[9px] uppercase cursor-pointer"
                         >
                           Snimi
                         </button>
                         <button
                           type="button"
                           onClick={() => setEditingSeasonNum(null)}
-                          className="px-1.5 py-0.5 bg-zinc-850 hover:bg-zinc-700 text-zinc-350 rounded text-[8px] cursor-pointer"
+                          className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md text-[9px] cursor-pointer"
                         >
                           X
                         </button>
@@ -309,24 +338,27 @@ export default function RatingGrid({
                     </div>
                   ) : (
                     <>
-                      <span className="text-[10px] sm:text-xs font-extrabold text-zinc-300 truncate max-w-full block" title={s.seasonName || `S${s.seasonNumber}`}>
+                      <span className="text-[10px] sm:text-xs font-black text-zinc-300 truncate max-w-full block" title={s.seasonName || `S${s.seasonNumber}`}>
                         {entry.type === 'universe' ? (s.seasonName || `Faza ${s.seasonNumber}`) : (s.seasonName || `Sezona ${s.seasonNumber}`)}
                       </span>
-                      <div className="flex flex-col gap-0.5 mt-0.5 text-[8px] font-bold text-zinc-550">
+                      {/* Hover Season Control Icons */}
+                      <div className="flex items-center gap-1 mt-1 opacity-70 group-hover:opacity-100 transition-opacity bg-zinc-900/90 px-1 py-0.5 rounded-lg border border-zinc-800/80 shadow-md">
                         <button
                           onClick={() => onAddEpisodeToSeason(s.seasonNumber)}
-                          className="hover:text-emerald-400 hover:underline text-left transition-colors font-extrabold uppercase cursor-pointer"
+                          className="p-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 rounded transition-all cursor-pointer"
+                          title={entry.type === 'universe' ? "Dodaj stavku" : "Dodaj epizodu"}
                         >
-                          + Dodaj
+                          <Plus size={11} strokeWidth={2.5} />
                         </button>
                         <button
                           onClick={() => {
                             setCustomEpValue((s.episodes || []).length);
                             setEditingSeasonNum(s.seasonNumber);
                           }}
-                          className="hover:text-yellow-455 hover:underline text-left transition-colors font-extrabold uppercase cursor-pointer"
+                          className="p-1 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-950/40 rounded transition-all cursor-pointer"
+                          title="Promijeni broj epizoda"
                         >
-                          Vel.
+                          <Edit2 size={11} strokeWidth={2.5} />
                         </button>
                         <button
                           onClick={() => {
@@ -334,9 +366,10 @@ export default function RatingGrid({
                               onDeleteSeason?.(s.seasonNumber);
                             }
                           }}
-                          className="hover:text-red-400 hover:underline text-left transition-colors font-extrabold uppercase cursor-pointer"
+                          className="p-1 text-red-400 hover:text-red-300 hover:bg-red-955/40 rounded transition-all cursor-pointer"
+                          title={entry.type === 'universe' ? "Obriši fazu" : "Obriši sezonu"}
                         >
-                          Briši
+                          <Trash2 size={11} strokeWidth={2.5} />
                         </button>
                       </div>
                     </>
@@ -351,24 +384,49 @@ export default function RatingGrid({
                     return (
                       <div
                         key={`cell-inv-${s.seasonNumber}-${epNum}`}
-                        className="h-11 rounded-lg border border-zinc-900 bg-zinc-950/20 flex items-center justify-center text-zinc-700 text-xs font-mono"
+                        className="h-8 sm:h-9 rounded-xl border border-zinc-900/60 bg-zinc-950/20 flex items-center justify-center text-zinc-700 text-[10px] font-mono"
                       >
                         -
                       </div>
                     );
                   }
 
+                  const epLabel = `E${epNum < 10 ? `0${epNum}` : epNum}`;
+                  const epTitle = episode.name || `Epizoda ${epNum}`;
+                  const isSlim = seasons.length <= 2;
+
                   return (
-                    <motion.button
-                      key={`cell-inv-${s.seasonNumber}-${epNum}`}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => onEpisodeClick(s.seasonNumber, episode)}
-                      id={`episode-cell-inv-s${s.seasonNumber}e${epNum}`}
-                      className={`h-11 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer font-sans font-extrabold ${getRatingColorClass(episode.rating)}`}
-                    >
-                      <span className="text-sm tracking-tighter">{episode.rating.toFixed(1)}</span>
-                    </motion.button>
+                    <div key={`cell-inv-${s.seasonNumber}-${epNum}`} className="relative group z-10 hover:z-30">
+                      <motion.button
+                        whileHover={{ scale: 1.08 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => onEpisodeClick(s.seasonNumber, episode)}
+                        id={`episode-cell-inv-s${s.seasonNumber}e${epNum}`}
+                        className={`w-full ${isSlim ? 'h-7 sm:h-7.5 max-w-[4.2rem] text-[11px]' : 'h-8 sm:h-9 text-[11px] sm:text-xs'} mx-auto rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer font-mono font-black shadow-md group-hover:shadow-[0_0_15px_rgba(250,204,21,0.3)] border border-white/5 ${getRatingColorClass(episode.rating)}`}
+                      >
+                        <span>{episode.rating.toFixed(1)}</span>
+                      </motion.button>
+
+                      {/* Hover Tooltip Card showing Episode Title & Synopsis */}
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-3 bg-zinc-950/95 border border-zinc-800 rounded-2xl shadow-2xl backdrop-blur-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-50 transform group-hover:-translate-y-1 text-left">
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="text-[10px] font-mono font-black text-yellow-400 uppercase tracking-wider">
+                            S{s.seasonNumber < 10 ? `0${s.seasonNumber}` : s.seasonNumber}{epLabel}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-[10px] font-black text-zinc-300">
+                            ★ {episode.rating.toFixed(1)}
+                          </span>
+                        </div>
+                        <div className="text-xs font-black text-white line-clamp-1">
+                          {epTitle}
+                        </div>
+                        {episode.overview && (
+                          <p className="text-[10px] text-zinc-300 line-clamp-2 mt-1 leading-normal font-normal">
+                            {episode.overview}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
