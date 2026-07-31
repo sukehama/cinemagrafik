@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import vedoImg from '../assets/images/vedo_foot_1785519357278.jpg';
+const vedoImg = '/images/vedo_foot.jpg';
 
 interface VedoPhysicsOverlayProps {
   isActive: boolean;
