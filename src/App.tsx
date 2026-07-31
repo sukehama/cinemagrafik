@@ -562,27 +562,38 @@ export default function App() {
   }, []);
 
   // Compute matched entries and actors for autocomplete universal search
+// Compute matched entries, actors AND episodes for universal search
   const universalSearchResults = useMemo(() => {
     const query = universalQuery.toLowerCase().trim();
-    if (!query) return { entries: [], actors: [] };
+    if (!query) return { entries: [], actors: [], episodes: [] };
 
-    // Match movies, shows, universes
+    // 1. Pretraga filmova i serija
     const matchedEntries = entries.filter(e => e.name.toLowerCase().includes(query));
 
-    // Match actors (by name, primary characterName, or specific role/episode names)
-    const matchedActors = allActorsWithAppearances.filter(a => {
-      const nameMatch = a.actor.name.toLowerCase().includes(query);
-      const characterMatch = a.actor.characterName && a.actor.characterName.toLowerCase().includes(query);
-      const hasInRoles = a.appearances.some(app => 
-        (app.rawActor.characterName && app.rawActor.characterName.toLowerCase().includes(query)) ||
-        (app.epName && app.epName.toLowerCase().includes(query))
-      );
-      return nameMatch || characterMatch || hasInRoles;
+    // 2. Pretraga glumaca
+    const matchedActors = allActorsWithAppearances.filter(a => 
+      a.actor.name.toLowerCase().includes(query) ||
+      (a.actor.characterName && a.actor.characterName.toLowerCase().includes(query))
+    );
+
+    // 3. Pretraga pojedinačnih epizoda
+    const matchedEpisodes: { entry: RatingEntry; seasonNum: number; episode: Episode }[] = [];
+    entries.forEach(e => {
+      if (e.seasons) {
+        e.seasons.forEach(s => {
+          s.episodes.forEach(ep => {
+            if (ep.name.toLowerCase().includes(query)) {
+              matchedEpisodes.push({ entry: e, seasonNum: s.seasonNumber, episode: ep });
+            }
+          });
+        });
+      }
     });
 
     return {
       entries: matchedEntries,
-      actors: matchedActors
+      actors: matchedActors,
+      episodes: matchedEpisodes
     };
   }, [entries, allActorsWithAppearances, universalQuery]);
 
@@ -1411,6 +1422,14 @@ export default function App() {
 
             {/* TOP CENTER: FLOATING NAVIGATION TABS DOCK (Icon-only by default, expands text smoothly on hover) */}
             <nav className="flex items-center justify-center gap-2 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl max-w-full">
+{/* DUGME SA LUPOM SKROZ LIJEVO */}
+<button
+  onClick={() => { setIsUniversalSearchOpen(true); setUniversalQuery(''); }}
+  className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-yellow-400 transition-all duration-300 cursor-pointer shrink-0 hover:scale-105 active:scale-95"
+  title="Pretraži (Ctrl + K)"
+>
+  <Search size={16} />
+</button>
               {[
                 { id: 'home', label: 'Meni', icon: Home },
                 { id: 'katalog', label: 'Katalog', icon: Film },
@@ -2129,7 +2148,10 @@ export default function App() {
                 exit={{ opacity: 0, x: 16 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
-                <ChatView currentUserProfile={userProfile} />
+                <ChatView 
+  currentUserProfile={userProfile} 
+  onSelectUser={(userId) => handleOpenSocialProfile(userId)}
+/>
               </motion.div>
             ) : (
               <motion.div

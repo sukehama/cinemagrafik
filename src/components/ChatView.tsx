@@ -5,16 +5,10 @@ import {
   Send, 
   Image as ImageIcon, 
   Trash2, 
-  Smile, 
   Sparkles, 
   Upload, 
   X, 
-  User as UserIcon,
-  Filter,
-  Flame,
-  ThumbsUp,
-  Heart,
-  Laugh
+  User as UserIcon
 } from 'lucide-react';
 import { UserProfile } from '../firebaseSync';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
@@ -28,16 +22,17 @@ export interface ChatMessage {
   text: string;
   imageUrl?: string;
   createdAt: string;
-  reactions?: Record<string, string[]>; // emoji -> array of userIds
+  reactions?: Record<string, string[]>;
 }
 
 interface ChatViewProps {
   currentUserProfile: UserProfile | null;
+  onSelectUser?: (userId: string) => void; // Omogućeno otvaranje profila klikom na korisnika u chatu
 }
 
 const DEFAULT_EMOJIS = ['👍', '❤️', '🔥', '😂', '🍿', '🚀', '💯', '💩'];
 
-export default function ChatView({ currentUserProfile }: ChatViewProps) {
+export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [imageUrlInput, setImageUrlInput] = useState('');
@@ -48,7 +43,6 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Firestore real-time listener for chat messages
   useEffect(() => {
     let unsubscribe: () => void;
     try {
@@ -58,18 +52,15 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
         snapshot.forEach((docSnap) => {
           loaded.push({ id: docSnap.id, ...(docSnap.data() as any) });
         });
-        // Sort chronologically ascending
         loaded.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         setMessages(loaded);
       }, (err) => {
-        console.warn('[Chat] Firestore error, fallback to local storage:', err);
         const saved = localStorage.getItem('cinema-chat-messages');
         if (saved) {
           try { setMessages(JSON.parse(saved)); } catch (e) {}
         }
       });
     } catch (err) {
-      console.warn('[Chat] Fallback to local storage:', err);
       const saved = localStorage.getItem('cinema-chat-messages');
       if (saved) {
         try { setMessages(JSON.parse(saved)); } catch (e) {}
@@ -81,12 +72,10 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
     };
   }, []);
 
-  // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Handle image upload from computer file
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -105,7 +94,6 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
     reader.readAsDataURL(file);
   };
 
-  // Send message
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputMessage.trim() && !imageUrlInput) return;
@@ -132,7 +120,6 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
       const chatCol = collection(db, 'chat_messages');
       await addDoc(chatCol, newMsg);
     } catch (err) {
-      console.warn('[Chat] Saving to local storage fallback:', err);
       const localMsg: ChatMessage = { ...newMsg, id: `msg-${Date.now()}` };
       const updated = [...messages, localMsg];
       setMessages(updated);
@@ -140,7 +127,6 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
     }
   };
 
-  // Toggle reaction on message
   const handleToggleReaction = async (messageId: string, emoji: string) => {
     const userId = currentUserProfile?.uid || guestName;
     const msg = messages.find(m => m.id === messageId);
@@ -165,14 +151,12 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
       const msgRef = doc(db, 'chat_messages', messageId);
       await updateDoc(msgRef, { reactions: updatedReactions });
     } catch (err) {
-      // Local fallback
       const updated = messages.map(m => m.id === messageId ? { ...m, reactions: updatedReactions } : m);
       setMessages(updated);
       localStorage.setItem('cinema-chat-messages', JSON.stringify(updated));
     }
   };
 
-  // Delete message
   const handleDeleteMessage = async (messageId: string) => {
     if (!confirm('Da li ste sigurni da želite obrisati ovu poruku?')) return;
     try {
@@ -203,19 +187,19 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-black uppercase tracking-wider text-white">
-                Zajednica & Chat Mimova
+                Zajednica & Chat
               </h2>
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[9px] font-mono font-bold animate-pulse">
                 UŽIVO
               </span>
             </div>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Razgovarajte sa ljubiteljima filmova, dijelite mimove, teorije i smiješne isječke!
+            {/* IZMJENA DESKRIPCIJE: Tačno zatraženi tekst */}
+            <p className="text-xs text-zinc-400 mt-0.5 font-medium">
+              Razgovaraj s drugim ljudima
             </p>
           </div>
         </div>
 
-        {/* CHAT CONTROLS & FILTER */}
         <div className="flex items-center gap-2 self-stretch sm:self-auto justify-between sm:justify-end">
           <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-2xl border border-zinc-800">
             <button
@@ -242,7 +226,6 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
         </div>
       </div>
 
-      {/* GUEST NAME BAR (if not logged in with Google) */}
       {!currentUserProfile && (
         <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-2xl flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 text-amber-300 font-medium">
@@ -285,30 +268,39 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
                 animate={{ opacity: 1, y: 0 }}
                 className={`flex gap-3 group ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
               >
-                {/* Author Avatar */}
-                <img
-                  src={msg.userPhotoUrl}
-                  alt={msg.userName}
-                  className="w-9 h-9 rounded-2xl object-cover bg-zinc-900 border border-zinc-800 shrink-0 mt-1 shadow-md"
-                  referrerPolicy="no-referrer"
-                />
+                {/* Author Avatar - Klikabilan za otvaranje profila */}
+                <button
+                  onClick={() => onSelectUser && onSelectUser(msg.userId)}
+                  className="shrink-0 focus:outline-none cursor-pointer"
+                  title={`Pogledaj profil ${msg.userName}`}
+                >
+                  <img
+                    src={msg.userPhotoUrl}
+                    alt={msg.userName}
+                    className="w-9 h-9 rounded-2xl object-cover bg-zinc-900 border border-zinc-800 hover:border-yellow-400 transition shadow-md mt-1"
+                    referrerPolicy="no-referrer"
+                  />
+                </button>
 
-                {/* Bubble Container */}
                 <div className={`max-w-[82%] sm:max-w-[70%] space-y-1 ${isMe ? 'items-end' : 'items-start'}`}>
                   
-                  {/* Author Name + Time */}
+                  {/* Klikabilno Ime za profil */}
                   <div className={`flex items-center gap-2 text-[10px] text-zinc-400 px-1 ${isMe ? 'flex-row-reverse' : ''}`}>
-                    <span className="font-extrabold text-zinc-300">{msg.userName}</span>
+                    <button
+                      onClick={() => onSelectUser && onSelectUser(msg.userId)}
+                      className="font-extrabold text-zinc-300 hover:text-yellow-400 transition cursor-pointer text-left"
+                    >
+                      {msg.userName}
+                    </button>
                     <span>•</span>
                     <span>
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
 
-                    {/* Delete action for own message */}
                     {isMe && (
                       <button
                         onClick={() => handleDeleteMessage(msg.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-300 p-0.5 ml-1"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-300 p-0.5 ml-1 cursor-pointer"
                         title="Obriši poruku"
                       >
                         <Trash2 size={11} />
@@ -316,7 +308,6 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
                     )}
                   </div>
 
-                  {/* Bubble Content */}
                   <div 
                     className={`p-3.5 rounded-2xl border transition-all shadow-lg space-y-2 ${
                       isMe 
@@ -324,7 +315,6 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
                         : 'bg-zinc-900/90 border-zinc-800 text-zinc-100 rounded-tl-none'
                     }`}
                   >
-                    {/* Attached Image/Meme */}
                     {msg.imageUrl && (
                       <div className="rounded-xl overflow-hidden border border-zinc-800 bg-black max-w-full">
                         <img
@@ -336,7 +326,6 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
                       </div>
                     )}
 
-                    {/* Text */}
                     {msg.text && (
                       <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words font-sans">
                         {msg.text}
@@ -344,9 +333,7 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
                     )}
                   </div>
 
-                  {/* EMOJI REACTIONS BAR */}
                   <div className={`flex flex-wrap items-center gap-1.5 pt-1 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    {/* Render active reactions */}
                     {msg.reactions && Object.entries(msg.reactions).map(([emoji, rawUserIds]) => {
                       const userIds = (rawUserIds || []) as string[];
                       if (!userIds || userIds.length === 0) return null;
@@ -368,7 +355,6 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
                       );
                     })}
 
-                    {/* Quick Reaction picker popover button */}
                     <div className="relative group/picker">
                       <button 
                         className="text-[10px] text-zinc-500 hover:text-yellow-400 px-1.5 py-0.5 rounded-full bg-zinc-900/60 border border-zinc-800 cursor-pointer transition-colors"
@@ -377,8 +363,7 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
                         + Reakcija
                       </button>
 
-                      {/* Dropdown Emoji List */}
-                      <div className="absolute bottom-full mb-1 left-0 hidden group-hover/picker:flex items-center gap-1 bg-zinc-950 border border-zinc-800 p-1.5 rounded-2xl shadow-2xl z-20">
+                      <div className="absolute bottom-full mb-1 left-0 hidden group-hover/picker:flex items-center gap-1 bg-zinc-955 border border-zinc-800 p-1.5 rounded-2xl shadow-2xl z-20">
                         {DEFAULT_EMOJIS.map(emoji => (
                           <button
                             key={`btn-em-${emoji}`}
@@ -400,10 +385,7 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* INPUT CONTROLS BAR */}
       <form onSubmit={handleSendMessage} className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800/90 p-3 sm:p-4 rounded-3xl shadow-2xl space-y-3">
-        
-        {/* Attached Image Preview bar */}
         {imageUrlInput && (
           <div className="flex items-center justify-between gap-3 p-2 bg-zinc-900 rounded-2xl border border-zinc-800">
             <div className="flex items-center gap-2">
@@ -413,14 +395,13 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
             <button
               type="button"
               onClick={() => setImageUrlInput('')}
-              className="p-1 text-zinc-400 hover:text-white"
+              className="p-1 text-zinc-400 hover:text-white cursor-pointer"
             >
               <X size={16} />
             </button>
           </div>
         )}
 
-        {/* URL Image Drawer */}
         <AnimatePresence>
           {isImageInputOpen && !imageUrlInput && (
             <motion.div
@@ -431,33 +412,30 @@ export default function ChatView({ currentUserProfile }: ChatViewProps) {
             >
               <div className="flex items-center justify-between text-xs font-bold text-zinc-300">
                 <span>Priloži sliku / mim:</span>
-                <button type="button" onClick={() => setIsImageInputOpen(false)} className="text-zinc-500 hover:text-white">
+                <button type="button" onClick={() => setIsImageInputOpen(false)} className="text-zinc-500 hover:text-white cursor-pointer">
                   <X size={14} />
                 </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* File Upload */}
-                <label className="flex items-center justify-center gap-2 p-2.5 bg-zinc-950 hover:bg-zinc-800 border border-dashed border-zinc-700 rounded-xl cursor-pointer text-xs font-bold text-zinc-300 transition-colors">
+                <label className="flex items-center justify-center gap-2 p-2.5 bg-zinc-955 hover:bg-zinc-800 border border-dashed border-zinc-700 rounded-xl cursor-pointer text-xs font-bold text-zinc-300 transition-colors">
                   <Upload size={14} className="text-yellow-400" />
                   <span>{isUploadingImage ? 'Učitavanje...' : 'Odaberi sliku iz računara'}</span>
                   <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
                 </label>
 
-                {/* Image URL input */}
                 <input
                   type="url"
                   placeholder="Ili zalijepi URL slike (http...)"
                   value={imageUrlInput}
                   onChange={(e) => setImageUrlInput(e.target.value)}
-                  className="bg-zinc-950 border border-zinc-800 focus:border-yellow-400 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
+                  className="bg-zinc-955 border border-zinc-800 focus:border-yellow-400 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
                 />
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Text Area & Action Buttons */}
         <div className="flex items-center gap-2">
           <button
             type="button"
