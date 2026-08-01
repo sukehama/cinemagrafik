@@ -88,7 +88,7 @@ export interface UserProfile {
   contributionsCount: number;
   bio?: string;
   bannerUrl?: string;
-  profileGradientStyle?: string; // 'classic' | 'cyberpunk' | 'sunset' | 'emerald' | 'cosmic' | 'gold'
+  profileGradientStyle?: string;
   statusText?: string;
   isOnline?: boolean;
   isModerator?: boolean;
@@ -127,7 +127,7 @@ export async function setUserModeratorStatus(targetUid: string, isModerator: boo
 }
 
 /**
- * Submit pending change request (for regular users)
+ * Submit pending change request (for regular non-moderator users)
  */
 export async function submitPendingChangeRequest(
   userId: string,
@@ -187,11 +187,6 @@ export async function updateChangeRequestStatus(requestId: string, status: 'appr
   }
 }
 
-
-/**
- * Syncs entries from Firestore in real-time.
- * If Firestore is empty and localEntries has data, migrates localEntries to Firestore.
- */
 export function sanitizeForFirestore<T>(data: T): T {
   if (data === undefined || data === null) return data;
   return JSON.parse(JSON.stringify(data));
@@ -206,11 +201,9 @@ export function syncFirestoreEntries(
   
   const entriesCol = collection(db, 'entries');
   
-  // Real-time listener
   const unsubscribe = onSnapshot(entriesCol, async (snapshot) => {
     try {
       if (snapshot.empty) {
-        // Firestore is empty. If we have local entries, migrate them!
         if (localEntries.length > 0) {
           console.log(`[Firebase Sync] Firestore is empty. Migrating ${localEntries.length} local entries...`);
           const CHUNK_SIZE = 400;
@@ -229,7 +222,6 @@ export function syncFirestoreEntries(
           onSync([]);
         }
       } else {
-        // Firestore has data, load it as the universal source of truth
         const firestoreEntries: RatingEntry[] = [];
         snapshot.forEach((doc) => {
           firestoreEntries.push(doc.data() as RatingEntry);
@@ -249,9 +241,6 @@ export function syncFirestoreEntries(
   return unsubscribe;
 }
 
-/**
- * Master Admin function: Pushes all local catalog entries to Firestore as universal truth.
- */
 export async function syncAllLocalCatalogToFirestore(entries: RatingEntry[]): Promise<void> {
   try {
     const CHUNK_SIZE = 400;
@@ -270,10 +259,6 @@ export async function syncAllLocalCatalogToFirestore(entries: RatingEntry[]): Pr
   }
 }
 
-/**
- * Saves or updates a rating entry in Firestore.
- * Optionally logs a contribution if user details are provided.
- */
 export async function saveEntryToFirestore(
   entry: RatingEntry,
   actionType: 'add' | 'edit',
@@ -300,10 +285,6 @@ export async function saveEntryToFirestore(
   }
 }
 
-/**
- * Deletes a rating entry from Firestore.
- * Optionally logs a contribution.
- */
 export async function deleteEntryFromFirestore(
   entryId: string,
   entryName: string,
@@ -330,9 +311,6 @@ export async function deleteEntryFromFirestore(
   }
 }
 
-/**
- * Logs a contribution to the global activity feed and updates user contribution count.
- */
 export async function logContribution(params: {
   userId: string;
   userName: string;
@@ -345,7 +323,6 @@ export async function logContribution(params: {
     const contribsCol = collection(db, 'contributions');
     const timestamp = new Date().toISOString();
     
-    // 1. Add contribution log document
     try {
       await addDoc(contribsCol, {
         ...params,
@@ -355,7 +332,6 @@ export async function logContribution(params: {
       handleFirestoreError(err, OperationType.CREATE, 'contributions');
     }
 
-    // 2. Increment user contribution count
     const userRef = doc(db, 'users', params.userId);
     let userSnap;
     try {
@@ -378,9 +354,6 @@ export async function logContribution(params: {
   }
 }
 
-/**
- * Syncs or creates user profile in Firestore upon successful Google Login.
- */
 export async function syncUserProfile(user: any): Promise<UserProfile> {
   const userRef = doc(db, 'users', user.uid);
   let userSnap;
@@ -399,7 +372,8 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
 
   const timestamp = new Date().toISOString();
 
-  const isMasterAdmin = user.email?.toLowerCase() === 'rogerstold@gmail.com';
+  // Master Admin E-mail
+  const isMasterAdmin = user.email?.toLowerCase() === 'bilkufarimulhik006@gmail.com' || user.email?.toLowerCase() === 'rogerstold@gmail.com';
 
   if (userSnap && userSnap.exists()) {
     const existingData = userSnap.data() as UserProfile;
@@ -410,7 +384,6 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
       lastActive: timestamp,
       isOnline: true,
     };
-    // Update last active and set online - handle failures gracefully when offline
     try {
       await updateDoc(userRef, {
         isAdmin: updatedProfile.isAdmin,
@@ -423,7 +396,6 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
     }
     return updatedProfile;
   } else {
-    // Create new profile with customizable default fields
     const newProfile: UserProfile = {
       uid: user.uid,
       displayName: user.displayName || user.email?.split('@')[0] || 'Korisnik',
@@ -444,15 +416,12 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
     try {
       await setDoc(userRef, newProfile);
     } catch (err) {
-      console.warn('[Firebase Sync] Failed to create new user profile in Firestore (offline), using local fallback profile:', err);
+      console.warn('[Firebase Sync] Failed to create new user profile in Firestore (offline):', err);
     }
     return newProfile;
   }
 }
 
-/**
- * Updates a user's profile with custom settings.
- */
 export async function updateUserProfile(uid: string, data: Partial<UserProfile>): Promise<void> {
   const userRef = doc(db, 'users', uid);
   try {
@@ -462,9 +431,6 @@ export async function updateUserProfile(uid: string, data: Partial<UserProfile>)
   }
 }
 
-/**
- * Fetches any user's profile by UID.
- */
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const userRef = doc(db, 'users', userId);
   try {
@@ -487,9 +453,6 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   return null;
 }
 
-/**
- * Fetches recent contributions for the user or globally.
- */
 export async function fetchContributions(userId?: string): Promise<ContributionLog[]> {
   try {
     const contribsCol = collection(db, 'contributions');

@@ -2050,6 +2050,34 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+{/* TROPHY COLLECTION BANNER (PRIKAZUJE SE ISKLJUČIVO NAKON ŠTO JE KUP OSVOJEN POBJEDOM) */}
+                {(localStorage.getItem('has_vedo_trophy') === 'true' || userProfile?.trophies?.some(t => t.id === 'vedo-slayer')) && (
+                  <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/15 to-amber-500/10 border-2 border-yellow-500/40 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-md animate-fade-in">
+                    <div className="flex items-center gap-4">
+                      {/* DIZAJN TROFEJA: ZLATNI KRUG SA YELLOW OUTLINE-OM I SLIKOM VELIKOG TROFEJA UNUTRA */}
+                      <div className="relative w-16 h-16 rounded-full bg-zinc-950 border-4 border-yellow-400 flex items-center justify-center shadow-[0_0_20px_rgba(250,204,21,0.5)] shrink-0">
+                        <Trophy size={32} className="text-yellow-400 animate-pulse" />
+                      </div>
+                      
+                      <div>
+                        <h4 className="text-xs font-black uppercase text-yellow-400 tracking-widest">
+                          KOLEKCIJA TROFEJA
+                        </h4>
+                        <p className="text-[11px] text-zinc-300 font-bold mt-0.5">
+                          Osvojeni pehari u Cinema Grafik katalogu
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* SREDINA: KUP POBJEDE BEDŽ */}
+                    <div className="flex items-center gap-2.5 bg-zinc-950/90 px-5 py-2.5 rounded-xl border-2 border-yellow-400/60 shadow-inner">
+                      <Trophy size={18} className="text-yellow-400 animate-bounce shrink-0" />
+                      <span className="text-xs font-black text-white uppercase tracking-wider">
+                        Kup Pobjede Vedo Dele 🏆
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* STATISTICS BENTO GRID */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2165,38 +2193,21 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                    {entries.filter(e => e.type !== 'universe').map((e, index) => {
+{entries.filter(e => e.type !== 'universe').map((e, index) => {
                       const avgRating = calculateAverageRating(e);
+
                       return (
                         <div
                           key={`home-dir-${e.id}`}
-                          draggable={true}
-                          onDragStart={(ev) => {
-                            ev.dataTransfer.setData('text/plain', e.id);
-                          }}
-                          onDragOver={(ev) => ev.preventDefault()}
-                          onDrop={(ev) => {
-                            ev.preventDefault();
-                            const draggedId = ev.dataTransfer.getData('text/plain');
-                            if (!draggedId || draggedId === e.id) return;
-                            setEntries(prev => {
-                              const fromIndex = prev.findIndex(item => item.id === draggedId);
-                              const toIndex = prev.findIndex(item => item.id === e.id);
-                              if (fromIndex === -1 || toIndex === -1) return prev;
-                              const updated = [...prev];
-                              const [removed] = updated.splice(fromIndex, 1);
-                              updated.splice(toIndex, 0, removed);
-                              return updated;
-                            });
-                          }}
-                          onClick={() => {
+                          onClick={(ev) => {
+                            // Siguran klik bez bloka
                             handleSelectEntry(e.id);
                             setSelectedActorName(null);
                           }}
                           className="bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-yellow-400/50 rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 active:scale-98 group cursor-pointer shadow-xl flex flex-col h-full relative"
                         >
-                          {/* Reorder controls on hover */}
-                          <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-950/90 border border-zinc-800 rounded-lg p-0.5">
+                          {/* Kontrole za precizno sortiranje/razvrstavanje na hover (Lijevo / Desno) */}
+                          <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-950/90 border border-zinc-800 rounded-lg p-0.5 shadow-xl">
                             <button
                               onClick={(ev) => {
                                 ev.stopPropagation();
@@ -2210,8 +2221,8 @@ export default function App() {
                                   return updated;
                                 });
                               }}
-                              className="p-1 text-zinc-400 hover:text-yellow-400 cursor-pointer text-[10px]"
-                              title="Pomjeri lijevo"
+                              className="p-1.5 text-zinc-400 hover:text-yellow-400 hover:bg-zinc-900 rounded cursor-pointer text-xs font-bold transition-colors"
+                              title="Pomjeri ulijevo"
                             >
                               ←
                             </button>
@@ -2228,14 +2239,14 @@ export default function App() {
                                   return updated;
                                 });
                               }}
-                              className="p-1 text-zinc-400 hover:text-yellow-400 cursor-pointer text-[10px]"
-                              title="Pomjeri desno"
+                              className="p-1.5 text-zinc-400 hover:text-yellow-400 hover:bg-zinc-900 rounded cursor-pointer text-xs font-bold transition-colors"
+                              title="Pomjeri udesno"
                             >
                               →
                             </button>
                           </div>
 
-                          {/* Poster thumbnail container */}
+                          {/* Sličica postera */}
                           <div className="relative aspect-[2/3] w-full bg-zinc-950 overflow-hidden shrink-0">
                             <img
                               src={e.posterUrl}
@@ -2243,7 +2254,7 @@ export default function App() {
                               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                               referrerPolicy="no-referrer"
                             />
-                            {/* Overlay category badge */}
+                            {/* Oznaka kategorije */}
                             <span className={`absolute top-3 left-3 px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider ${
                               e.type === 'show' 
                                 ? 'bg-emerald-950/95 text-emerald-400 border border-emerald-900/50' 
@@ -2254,14 +2265,14 @@ export default function App() {
                               {e.type === 'show' ? 'Serija' : e.type === 'universe' ? 'Univerzum' : 'Film'}
                             </span>
 
-                            {/* Average rating star badge */}
+                            {/* Prosječna ocjena */}
                             <div className="absolute bottom-3 right-3 bg-zinc-950/90 border border-zinc-800 px-2 py-1 rounded-lg flex items-center gap-1 text-[10px] font-black text-yellow-400 font-mono shadow-md">
                               <Star size={10} className="fill-current" />
                               <span>{avgRating > 0 ? avgRating.toFixed(1) : '—'}</span>
                             </div>
                           </div>
 
-                          {/* Info section */}
+                          {/* Detalji */}
                           <div className="p-4 flex flex-col justify-between flex-1 space-y-2">
                             <div>
                               <p className="text-[10px] font-mono font-bold text-zinc-400">{e.year}</p>
@@ -3602,8 +3613,43 @@ export default function App() {
         onSelectUser={handleOpenSocialProfile}
       />
 
-      {/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}
-      <VedoPhysicsOverlay isActive={isVedoMode} />
+{/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}
+      <VedoPhysicsOverlay
+        isActive={isVedoMode}
+        onCloseRequested={() => setIsVedoMode(false)}
+        onBossDefeated={async () => {
+          localStorage.setItem('has_vedo_trophy', 'true');
+          
+          const newTrophy = {
+            id: 'vedo-slayer',
+            name: 'Kup Pobjede Vedo Dele 🏆',
+            date: new Date().toISOString()
+          };
+
+          if (userProfile) {
+            const updatedTrophies = [...(userProfile.trophies || [])];
+            if (!updatedTrophies.some(t => t.id === 'vedo-slayer')) {
+              updatedTrophies.push(newTrophy);
+            }
+
+            // 1. Ažuriraj lokalno stanje
+            setUserProfile(prev => prev ? {
+              ...prev,
+              trophies: updatedTrophies
+            } : null);
+
+            // 2. Ažuriraj i SPREMI TRAJNO u Firebase bazu za tog korisnika!
+            try {
+              await updateUserProfile(userProfile.uid, {
+                trophies: updatedTrophies
+              });
+              console.log('[Boss Fight] Trofej uspješno sačuvan u Firebase profilu!');
+            } catch (err) {
+              console.error('[Boss Fight] Greška pri spremanju trofeja u Firebase:', err);
+            }
+          }
+        }}
+      />
 
       {/* RESET PASSWORD MODAL */}
       {resetOobCode && (
@@ -3687,7 +3733,7 @@ export default function App() {
         </div>
       )}
 
-      </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}
+      </div>
     </div>
   );
 }
