@@ -1373,11 +1373,12 @@ export default function App() {
       <div className="relative z-10 flex flex-col min-h-screen">
         
         {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
+{/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
         <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3 backdrop-blur-2xl bg-zinc-950/90 border-b border-zinc-800/80 shadow-2xl transition-all">
-          <div className="max-w-7xl mx-auto flex flex-col md:grid md:grid-cols-[1fr_auto_1fr] md:items-center gap-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             
-            {/* TOP LEFT: BRAND LOGO & QUICK ENTRY SELECTOR */}
-            <div className="flex items-center justify-between md:justify-start gap-3">
+            {/* LIJEVO: LOGO & SELEKTOR */}
+            <div className="flex items-center gap-3 shrink-0">
               <button
                 onClick={() => { 
                   handleLogoClick(); 
@@ -1394,7 +1395,7 @@ export default function App() {
                     <Film size={20} className="stroke-[2.5]" />
                   )}
                 </div>
-                <div className="text-left">
+                <div className="text-left hidden sm:block">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-black uppercase tracking-wider text-zinc-100 group-hover:text-yellow-400 transition-colors">
                       {isVedoMode ? (
@@ -1410,7 +1411,7 @@ export default function App() {
                 </div>
               </button>
 
-              {/* QUICK ENTRY DROPDOWN MENU (Jump directly to any Movie/Show/Universe) */}
+              {/* QUICK ENTRY DROPDOWN MENU */}
               {entries.length > 0 && (
                 <div className="relative hidden lg:block">
                   <select
@@ -1422,7 +1423,7 @@ export default function App() {
                         setSelectedActorName(null);
                       }
                     }}
-                    className="bg-zinc-900/90 text-zinc-200 text-xs font-bold py-1.5 px-3 pr-8 rounded-xl border border-zinc-800/90 hover:border-yellow-400/50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-yellow-400/40 truncate max-w-[210px] shadow-inner"
+                    className="bg-zinc-900/90 text-zinc-200 text-xs font-bold py-1.5 px-3 pr-8 rounded-xl border border-zinc-800/90 hover:border-yellow-400/50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-yellow-400/40 truncate max-w-[180px] shadow-inner"
                   >
                     <option value="" disabled>-- Izaberi Naslov --</option>
                     {entries.map(e => (
@@ -1436,8 +1437,8 @@ export default function App() {
               )}
             </div>
 
-            {/* TOP CENTER: FLOATING NAVIGATION TABS DOCK (Icon-only by default, expands text smoothly on hover) */}
-            <nav className="flex items-center justify-center gap-2 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl max-w-full">
+            {/* SREDINA: FLOATING NAVIGATION TABS DOCK */}
+            <nav className="flex items-center justify-center gap-1.5 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl">
               {[
                 { id: 'home', label: 'Meni', icon: Home },
                 { id: 'katalog', label: 'Katalog', icon: Film },
@@ -1470,7 +1471,6 @@ export default function App() {
                   >
                     <Icon size={17} className="shrink-0 transition-transform duration-300" />
                     
-                    {/* Silky smooth text expansion on hover */}
                     <div className={`overflow-hidden transition-all duration-300 ease-out flex items-center ${
                       isHovered ? 'max-w-xs opacity-100 ml-2.5' : 'max-w-0 opacity-0 ml-0'
                     }`}>
@@ -1488,46 +1488,47 @@ export default function App() {
               })}
             </nav>
 
-            {/* TOP RIGHT: ACTIONS, TOOLS & USER PROFILE */}
-            <div className="flex items-center gap-3">
-              {/* SEARCH BUTTON */}
+            {/* DESNO: PRETRAGA, ALATI I PROFIL (GURNUTI SKROZ DESNO) */}
+            <div className="flex items-center gap-2.5 shrink-0 ml-auto">
+              
+              {/* LUPA / PRETRAGA */}
               <button
                 onClick={() => { setIsUniversalSearchOpen(true); setUniversalQuery(''); }}
-                className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-yellow-400 transition-all duration-200 cursor-pointer shrink-0 hover:scale-110 active:scale-95"
+                className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-yellow-400 transition-all duration-200 cursor-pointer shrink-0 hover:scale-105 active:scale-95"
                 title="Pretraži (Ctrl + K)"
               >
                 <Search size={16} />
               </button>
 
-              {/* PRIMARY ACTION: ADD NEW ENTRY (Sleek Icon-Only Plus Button) */}
-              {canCreate ? (
-              <button
-                onClick={() => setIsAddModalOpen(true)}
-                id="btn-open-add-slate"
-                className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black rounded-xl shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:shadow-[0_0_25px_rgba(250,204,21,0.5)] hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
-                title="Dodaj Novi Naslov (Film, Serija ili Univerzum)"
-              >
-                <Plus size={18} strokeWidth={3} />
-              </button>
-              ) : null}
+              {/* DODOAJ NOVI NASLOV */}
+              {canCreate && (
+                <button
+                  onClick={() => setIsAddModalOpen(true)}
+                  id="btn-open-add-slate"
+                  className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black rounded-xl shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0"
+                  title="Dodaj Novi Naslov"
+                >
+                  <Plus size={18} strokeWidth={3} />
+                </button>
+              )}
 
-              {/* ADMIN PANEL BUTTON - visible only to admin */}
+              {/* ADMIN PANEL */}
               {isAdmin && (
                 <button
                   onClick={() => setIsAdminPanelOpen(true)}
-                  className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400/20 to-amber-500/20 hover:from-yellow-400/30 hover:to-amber-500/30 text-yellow-400 font-black rounded-xl border border-yellow-400/30 hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
+                  className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400/20 to-amber-500/20 hover:from-yellow-400/30 hover:to-amber-500/30 text-yellow-400 font-black rounded-xl border border-yellow-400/30 hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0"
                   title="Admin Panel"
                 >
                   <Crown size={16} />
                 </button>
               )}
 
-              {/* TOOLS DROPDOWN MENU */}
+              {/* ALATI DROPDOWN */}
               <div className="relative">
                 <button
                   onClick={() => setIsToolsOpen(!isToolsOpen)}
                   id="btn-tools-dropdown"
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                     isToolsOpen
                       ? 'bg-zinc-800 text-white border-yellow-400/50 shadow-[0_0_15px_rgba(250,204,21,0.15)]'
                       : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white'
@@ -1535,14 +1536,13 @@ export default function App() {
                   title="Upravljanje i dodatne alatke"
                 >
                   <SlidersHorizontal size={15} className="text-yellow-400" />
-                  <span className="hidden sm:inline">Alati</span>
+                  <span className="hidden md:inline">Alati</span>
                   <ChevronDown size={14} className={`transform transition-transform duration-200 ${isToolsOpen ? 'rotate-180 text-yellow-400' : 'text-zinc-500'}`} />
                 </button>
 
                 <AnimatePresence>
                   {isToolsOpen && (
                     <>
-                      {/* Click away backdrop */}
                       <div className="fixed inset-0 z-40" onClick={() => setIsToolsOpen(false)} />
 
                       <motion.div
@@ -1559,13 +1559,11 @@ export default function App() {
                           <Sparkles size={12} className="text-yellow-400" />
                         </div>
 
-                        {/* Surprise Me */}
                         <button
                           onClick={() => {
                             setIsToolsOpen(false);
                             setIsSurpriseOpen(true);
                           }}
-                          id="btn-surprise-me"
                           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-purple-300 hover:bg-purple-500/15 hover:text-purple-200 transition-all text-left cursor-pointer group"
                         >
                           <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
@@ -1577,14 +1575,12 @@ export default function App() {
                           </div>
                         </button>
 
-                        {/* HTML Export */}
                         <button
                           onClick={() => {
                             setIsToolsOpen(false);
                             setExportInitialTab('web-html');
                             setIsExportModalOpen(true);
                           }}
-                          id="btn-open-export-hub"
                           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group"
                         >
                           <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
@@ -1596,14 +1592,12 @@ export default function App() {
                           </div>
                         </button>
 
-                        {/* JSON Database */}
                         <button
                           onClick={() => {
                             setIsToolsOpen(false);
                             setExportInitialTab('json-backup');
                             setIsExportModalOpen(true);
                           }}
-                          id="btn-open-json-db"
                           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group"
                         >
                           <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
@@ -1615,13 +1609,11 @@ export default function App() {
                           </div>
                         </button>
 
-                        {/* Manual Save */}
                         <button
                           onClick={() => {
                             setIsToolsOpen(false);
                             handleManualSave();
                           }}
-                          id="btn-manual-sync-save"
                           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-emerald-300 hover:bg-emerald-500/15 transition-all text-left cursor-pointer group"
                         >
                           <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
@@ -1633,17 +1625,15 @@ export default function App() {
                           </div>
                         </button>
 
-                        {/* Replay Intro */}
                         <button
                           onClick={() => {
                             setIsToolsOpen(false);
                             setShowIntro(true);
                           }}
-                          id="btn-replay-intro"
                           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 transition-all text-left cursor-pointer group"
                         >
                           <div className="w-7 h-7 rounded-lg bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-yellow-400 group-hover:scale-105 transition-transform">
-                            <Sparkles size={14} className="animate-spin-slow" />
+                            <Sparkles size={14} />
                           </div>
                           <div>
                             <div className="font-bold">Ponovi Uvodnu Animaciju</div>
@@ -1652,13 +1642,11 @@ export default function App() {
                         </button>
 
                         <div className="pt-1 border-t border-zinc-900 mt-1">
-                          {/* Reset defaults */}
                           <button
                             onClick={() => {
                               setIsToolsOpen(false);
                               handleResetToDefaults();
                             }}
-                            id="btn-reset-data"
                             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-red-400 hover:bg-red-500/15 transition-all text-left cursor-pointer group"
                           >
                             <div className="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-105 transition-transform">
@@ -1676,119 +1664,87 @@ export default function App() {
                 </AnimatePresence>
               </div>
 
-            {/* PROFILE / GOOGLE SIGN-IN BUTTON */}
-            <div className="relative">
-              {isAuthLoading ? (
-                <div className="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-                  <RefreshCw size={14} className="text-zinc-500 animate-spin" />
-                </div>
-              ) : user ? (
-                // LOGGED IN: Beautiful profile image with status ring and click action
-                <button
-                  onClick={() => setIsProfileOpen(true)}
-                  className="flex items-center gap-1.5 focus:outline-none group cursor-pointer animate-fade-in"
-                  title={`Profil: ${userProfile?.displayName || user.displayName}`}
-                >
-                  <div className="relative">
-                    <img 
-                      src={userProfile?.photoURL || user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80'} 
-                      alt={userProfile?.displayName || user.displayName || 'Korisnik'} 
-                      className="w-9 h-9 rounded-full border-2 border-yellow-400 group-hover:border-yellow-500 transition object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                    <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-zinc-950 bg-emerald-400 animate-pulse" />
+              {/* PROFIL KORISNIKA / LOGIN */}
+              <div className="relative">
+                {isAuthLoading ? (
+                  <div className="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                    <RefreshCw size={14} className="text-zinc-500 animate-spin" />
                   </div>
-                </button>
-              ) : (
-                // NOT LOGGED IN: Empty profile outline icon. Click shows dropdown or triggers login.
-                <div className="relative">
+                ) : user ? (
                   <button
-                    onClick={() => setShowSignInDropdown(!showSignInDropdown)}
-                    className={`w-9 h-9 rounded-full bg-zinc-900 border flex items-center justify-center transition cursor-pointer ${
-                      showSignInDropdown ? 'border-yellow-400 text-yellow-400' : 'border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
-                    }`}
-                    title="Prijavite se s Google-om"
+                    onClick={() => setIsProfileOpen(true)}
+                    className="flex items-center gap-1.5 focus:outline-none group cursor-pointer animate-fade-in"
+                    title={`Profil: ${userProfile?.displayName || user.displayName}`}
                   >
-                    <User size={16} />
+                    <div className="relative">
+                      <img 
+                        src={userProfile?.photoURL || user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80'} 
+                        alt={userProfile?.displayName || user.displayName || 'Korisnik'} 
+                        className="w-9 h-9 rounded-full border-2 border-yellow-400 group-hover:border-yellow-500 transition object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-zinc-950 bg-emerald-400 animate-pulse" />
+                    </div>
                   </button>
+                ) : (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowSignInDropdown(!showSignInDropdown)}
+                      className={`w-9 h-9 rounded-full bg-zinc-900 border flex items-center justify-center transition cursor-pointer ${
+                        showSignInDropdown ? 'border-yellow-400 text-yellow-400' : 'border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                      }`}
+                      title="Prijavite se s Google-om"
+                    >
+                      <User size={16} />
+                    </button>
 
-                  <AnimatePresence>
-                    {showSignInDropdown && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute right-0 mt-2 w-72 bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-2xl z-50 text-left space-y-4"
-                      >
-                        <div className="space-y-1">
-                          <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Prijavite Se</h4>
-                          <p className="text-[10px] text-zinc-400 leading-relaxed">
-                            Prijavite se Google računom kako biste sinkronizirali svoj katalog i pregledali doprinose na svim uređajima!
-                          </p>
-                        </div>
-
-                        {syncError === 'unauthorized-domain' ? (
-                          <div className="bg-amber-950/50 border border-amber-900/60 p-3.5 rounded-xl space-y-2.5 text-amber-200">
-                            <div className="flex gap-2 text-[11px] font-black uppercase tracking-wider text-amber-400 items-center">
-                              <AlertCircle size={14} className="shrink-0" />
-                              <span>Autorizacija Domene</span>
-                            </div>
-                            <p className="text-[10px] text-zinc-300 leading-relaxed">
-                              Kako bi Google prijava radila u Tauri aplikaciji i web pregledu, morate dodati ove domene u svoju Firebase konzolu:
-                            </p>
-                            <div className="bg-zinc-950 p-2 rounded-lg text-[9px] font-mono text-zinc-300 space-y-1 select-all border border-zinc-900 leading-normal">
-                              <div>• <span className="text-yellow-400">tauri.localhost</span></div>
-                              <div>• <span className="text-yellow-400">localhost</span></div>
-                              <div>• <span className="text-yellow-400">ais-dev-tvw4rthsz5lns4cdupfdzq-407597925605.europe-west1.run.app</span></div>
-                              <div>• <span className="text-yellow-400">ais-pre-tvw4rthsz5lns4cdupfdzq-407597925605.europe-west1.run.app</span></div>
-                            </div>
-                            <div className="text-[9px] text-zinc-400 leading-relaxed pt-1 border-t border-zinc-900">
-                              <strong>Koraci:</strong> Otvorite <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-yellow-400 underline hover:text-yellow-300 font-bold">Firebase Konzolu</a>, idite na <strong>Authentication &rarr; Settings &rarr; Authorized domains</strong> i dodajte ih na popis.
-                            </div>
-                          </div>
-                        ) : syncError ? (
-                          <div className="bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl flex gap-2 text-[10px] text-red-400 font-bold leading-relaxed">
-                            <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                            <span>{syncError}</span>
-                          </div>
-                        ) : null}
-
-                        <button
-                          onClick={async () => {
-                            try {
-                              setSyncError(null);
-                              await loginWithGoogle();
-                              setShowSignInDropdown(false);
-                            } catch (err: any) {
-                              console.error("Google login error:", err);
-                              let friendlyMsg = err.message || 'Prijava nije uspjela';
-                              if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain'))) {
-                                friendlyMsg = 'unauthorized-domain';
-                              }
-                              setSyncError(friendlyMsg);
-                            }
-                          }}
-                          className="w-full flex items-center justify-center gap-2.5 bg-white hover:bg-zinc-100 text-zinc-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer shadow-lg"
+                    <AnimatePresence>
+                      {showSignInDropdown && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 mt-2 w-72 bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-2xl z-50 text-left space-y-4"
                         >
-                          {/* Google logo icon */}
-                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                          </svg>
-                          Google Prijava
-                        </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Prijavite Se</h4>
+                            <p className="text-[10px] text-zinc-400 leading-relaxed">
+                              Prijavite se Google računom kako biste sinkronizirali svoj katalog i pregledali doprinose!
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={async () => {
+                              try {
+                                setSyncError(null);
+                                await loginWithGoogle();
+                                setShowSignInDropdown(false);
+                              } catch (err: any) {
+                                console.error("Google login error:", err);
+                                setSyncError(err.message || 'Prijava nije uspjela');
+                              }
+                            }}
+                            className="w-full flex items-center justify-center gap-2.5 bg-white hover:bg-zinc-100 text-zinc-955 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer shadow-lg"
+                          >
+                            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                            </svg>
+                            Google Prijava
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
       {/* CINEMATIC INTRO ANIMATION & AUDIO */}
       <CinematicIntro

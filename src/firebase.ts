@@ -6,31 +6,27 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut,
-  onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
   User
 } from 'firebase/auth';
 import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  setDoc, 
-  getDocs, 
-  onSnapshot,
-  writeBatch,
-  query,
-  where,
-  getDoc
+  getFirestore
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// Initialize Auth and Firestore with explicit databaseId
+// Initialize Auth and Firestore
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-// Configure Google Auth Provider
+// postavi trajnu sesiju u pregledniku/tauri okruženju
+setPersistence(auth, browserLocalPersistence).catch(err => {
+  console.error("Error setting persistence:", err);
+});
+
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: 'select_account'
@@ -41,13 +37,6 @@ function isTauriEnvironment(): boolean {
   return '__TAURI_INTERNALS__' in window || '__TAURI__' in window;
 }
 
-/**
- * Handles signing in with Google.
- * In Tauri desktop apps, signInWithPopup doesn't work because the popup window
- * cannot post the auth result back to the webview (cross-origin restriction).
- * We detect Tauri and use signInWithRedirect instead, which navigates the whole
- * webview and returns the result via getRedirectResult() on app reload.
- */
 export async function loginWithGoogle(): Promise<User | null> {
   if (isTauriEnvironment()) {
     await signInWithRedirect(auth, googleProvider);
@@ -58,26 +47,15 @@ export async function loginWithGoogle(): Promise<User | null> {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error: any) {
-    console.warn("Popup blocked or failed, attempting redirect login...", error);
+    console.warn("Popup error, falling back to redirect:", error);
     if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
       throw error;
     }
-    if (
-      error.code === 'auth/popup-blocked' || 
-      error.code === 'auth/iframe-userAgent-to-be-careful' || 
-      error.message?.includes('iframe') ||
-      error.message?.includes('popup')
-    ) {
-      await signInWithRedirect(auth, googleProvider);
-      return null;
-    }
-    throw error;
+    await signInWithRedirect(auth, googleProvider);
+    return null;
   }
 }
 
-/**
- * Checks for login redirect results when returning to app.
- */
 export async function checkRedirectResult(): Promise<User | null> {
   try {
     const result = await getRedirectResult(auth);
@@ -88,9 +66,6 @@ export async function checkRedirectResult(): Promise<User | null> {
   }
 }
 
-/**
- * Logs out the current user.
- */
 export async function logout(): Promise<void> {
   await signOut(auth);
 }

@@ -44,6 +44,14 @@ export interface FirestoreErrorInfo {
   }
 }
 
+/**
+ * Pomoćna funkcija koja uklanja sva 'undefined' polja iz objekata prije slanja u Firestore.
+ * Ovo sprječava grešku: "Function WriteBatch.set() called with invalid data. Unsupported field value: undefined"
+ */
+export const sanitizeForFirestore = <T>(data: T): T => {
+  return JSON.parse(JSON.stringify(data));
+};
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
@@ -149,7 +157,7 @@ export function syncFirestoreEntries(
           const batch = writeBatch(db);
           localEntries.forEach((entry) => {
             const docRef = doc(db, 'entries', entry.id);
-            batch.set(docRef, entry);
+            batch.set(docRef, sanitizeForFirestore(entry));
           });
           await batch.commit();
           console.log('[Firebase Sync] Migration completed successfully.');
@@ -191,7 +199,7 @@ export async function saveEntryToFirestore(
 ): Promise<void> {
   const docRef = doc(db, 'entries', entry.id);
   try {
-    await setDoc(docRef, entry);
+    await setDoc(docRef, sanitizeForFirestore(entry), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `entries/${entry.id}`);
   }
@@ -255,10 +263,10 @@ export async function logContribution(params: {
     
     // 1. Add contribution log document
     try {
-      await addDoc(contribsCol, {
+      await addDoc(contribsCol, sanitizeForFirestore({
         ...params,
         timestamp,
-      });
+      }));
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'contributions');
     }
@@ -344,7 +352,7 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
       role: initialRole,
     };
     try {
-      await setDoc(userRef, newProfile);
+      await setDoc(userRef, sanitizeForFirestore(newProfile));
     } catch (err) {
       console.warn('[Firebase Sync] Failed to create new user profile in Firestore (offline), using local fallback profile:', err);
     }
@@ -358,7 +366,7 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
 export async function updateUserProfile(uid: string, data: Partial<UserProfile>): Promise<void> {
   const userRef = doc(db, 'users', uid);
   try {
-    await updateDoc(userRef, data);
+    await updateDoc(userRef, sanitizeForFirestore(data));
   } catch (err) {
     console.warn(`[Firebase Sync] Failed to update user profile in Firestore (offline):`, err);
   }
@@ -447,7 +455,7 @@ export async function submitPendingEntry(
     submittedAt: new Date().toISOString(),
     status: 'pending',
   };
-  await addDoc(pendingCol, submission as any);
+  await addDoc(pendingCol, sanitizeForFirestore(submission) as any);
 }
 
 export async function fetchPendingSubmissions(): Promise<PendingSubmission[]> {
@@ -477,7 +485,7 @@ export async function approveSubmission(submission: PendingSubmission, reviewerI
   if (submission.actionType === 'delete') {
     await deleteDoc(doc(db, 'entries', submission.entryId));
   } else {
-    await setDoc(doc(db, 'entries', submission.entryId), submission.entryData as any, { merge: true });
+    await setDoc(doc(db, 'entries', submission.entryId), sanitizeForFirestore(submission.entryData) as any, { merge: true });
   }
 }
 
