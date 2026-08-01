@@ -1372,13 +1372,12 @@ export default function App() {
       {/* MAIN CONTAINER */}
       <div className="relative z-10 flex flex-col min-h-screen">
         
-        {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
 {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
         <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3 backdrop-blur-2xl bg-zinc-950/90 border-b border-zinc-800/80 shadow-2xl transition-all">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          <div className="max-w-7xl mx-auto flex flex-col lg:grid lg:grid-cols-[1fr_auto_1fr] items-center gap-4">
             
-            {/* LIJEVO: LOGO & SELEKTOR */}
-            <div className="flex items-center gap-3 shrink-0">
+            {/* LIJEVO: LOGO & SELEKTOR (Uvijek ostaje lijevo) */}
+            <div className="flex items-center justify-start gap-3 w-full lg:w-auto">
               <button
                 onClick={() => { 
                   handleLogoClick(); 
@@ -1386,7 +1385,7 @@ export default function App() {
                   setSelectedActorName(null); 
                 }}
                 className="flex items-center gap-2.5 group cursor-pointer"
-                title={isVedoMode ? "Vedo Dela Režim (Klikni 6x za isključivanje)" : "Cinema Grafik (Klikni 6x za iznenađenje)"}
+                title={isVedoMode ? "Vedo Dela Režim" : "Cinema Grafik"}
               >
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-yellow-400 to-amber-500 flex items-center justify-center text-zinc-955 font-black shadow-[0_0_15px_rgba(250,204,21,0.35)] group-hover:scale-105 transition-transform overflow-hidden">
                   {isVedoMode ? (
@@ -1398,11 +1397,7 @@ export default function App() {
                 <div className="text-left hidden sm:block">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-black uppercase tracking-wider text-zinc-100 group-hover:text-yellow-400 transition-colors">
-                      {isVedoMode ? (
-                        <>Vedo <span className="text-yellow-400">Dela</span></>
-                      ) : (
-                        <>Cinema<span className="text-yellow-400">Grafik</span></>
-                      )}
+                      {isVedoMode ? <>Vedo <span className="text-yellow-400">Dela</span></> : <>Cinema<span className="text-yellow-400">Grafik</span></>}
                     </span>
                   </div>
                   <div className="text-[10px] text-zinc-400 font-mono">
@@ -1411,9 +1406,8 @@ export default function App() {
                 </div>
               </button>
 
-              {/* QUICK ENTRY DROPDOWN MENU */}
               {entries.length > 0 && (
-                <div className="relative hidden lg:block">
+                <div className="relative hidden xl:block">
                   <select
                     value={activeEntry?.id || ''}
                     onChange={(e) => {
@@ -1437,8 +1431,8 @@ export default function App() {
               )}
             </div>
 
-            {/* SREDINA: FLOATING NAVIGATION TABS DOCK */}
-            <nav className="flex items-center justify-center gap-1.5 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl">
+            {/* SREDINA: NAVIGACIJA (Sada je SAVRŠENO centrirana zahvaljujući Grid-u) */}
+            <nav className="flex items-center justify-center gap-1.5 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl mx-auto w-fit">
               {[
                 { id: 'home', label: 'Meni', icon: Home },
                 { id: 'katalog', label: 'Katalog', icon: Film },
@@ -1488,10 +1482,9 @@ export default function App() {
               })}
             </nav>
 
-            {/* DESNO: PRETRAGA, ALATI I PROFIL (GURNUTI SKROZ DESNO) */}
-            <div className="flex items-center gap-2.5 shrink-0 ml-auto">
+            {/* DESNO: PRETRAGA, ALATI I PROFIL (Gurnuto skroz na desnu ivicu) */}
+            <div className="flex items-center justify-end gap-2.5 w-full lg:w-auto ml-auto">
               
-              {/* LUPA / PRETRAGA */}
               <button
                 onClick={() => { setIsUniversalSearchOpen(true); setUniversalQuery(''); }}
                 className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-yellow-400 transition-all duration-200 cursor-pointer shrink-0 hover:scale-105 active:scale-95"
@@ -1500,11 +1493,9 @@ export default function App() {
                 <Search size={16} />
               </button>
 
-              {/* DODOAJ NOVI NASLOV */}
               {canCreate && (
                 <button
                   onClick={() => setIsAddModalOpen(true)}
-                  id="btn-open-add-slate"
                   className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black rounded-xl shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0"
                   title="Dodaj Novi Naslov"
                 >
@@ -1512,7 +1503,6 @@ export default function App() {
                 </button>
               )}
 
-              {/* ADMIN PANEL */}
               {isAdmin && (
                 <button
                   onClick={() => setIsAdminPanelOpen(true)}
@@ -1523,28 +1513,24 @@ export default function App() {
                 </button>
               )}
 
-              {/* ALATI DROPDOWN */}
               <div className="relative">
                 <button
                   onClick={() => setIsToolsOpen(!isToolsOpen)}
-                  id="btn-tools-dropdown"
                   className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                     isToolsOpen
                       ? 'bg-zinc-800 text-white border-yellow-400/50 shadow-[0_0_15px_rgba(250,204,21,0.15)]'
                       : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white'
                   }`}
-                  title="Upravljanje i dodatne alatke"
                 >
                   <SlidersHorizontal size={15} className="text-yellow-400" />
-                  <span className="hidden md:inline">Alati</span>
-                  <ChevronDown size={14} className={`transform transition-transform duration-200 ${isToolsOpen ? 'rotate-180 text-yellow-400' : 'text-zinc-500'}`} />
+                  <span className="hidden xl:inline">Alati</span>
+                  <ChevronDown size={14} className={`transform transition-transform ${isToolsOpen ? 'rotate-180 text-yellow-400' : 'text-zinc-500'}`} />
                 </button>
 
                 <AnimatePresence>
                   {isToolsOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setIsToolsOpen(false)} />
-
                       <motion.div
                         initial={{ opacity: 0, y: 8, scale: 0.96 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1553,109 +1539,33 @@ export default function App() {
                         className="absolute right-0 mt-2 w-64 bg-zinc-950/95 border border-zinc-800/90 rounded-2xl p-2 shadow-2xl z-50 text-left space-y-1 backdrop-blur-xl"
                       >
                         <div className="px-3 py-2 border-b border-zinc-900 mb-1 flex items-center justify-between">
-                          <span className="text-[10px] font-mono font-black uppercase tracking-widest text-zinc-400">
-                            Upravljanje & Alatke
-                          </span>
+                          <span className="text-[10px] font-mono font-black uppercase tracking-widest text-zinc-400">Upravljanje & Alatke</span>
                           <Sparkles size={12} className="text-yellow-400" />
                         </div>
-
-                        <button
-                          onClick={() => {
-                            setIsToolsOpen(false);
-                            setIsSurpriseOpen(true);
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-purple-300 hover:bg-purple-500/15 hover:text-purple-200 transition-all text-left cursor-pointer group"
-                        >
-                          <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
-                            <Sparkles size={14} className="animate-pulse" />
-                          </div>
-                          <div>
-                            <div className="font-bold">Iznenadi me!</div>
-                            <div className="text-[9px] text-zinc-400 font-normal">Nasumična epizoda ili film</div>
-                          </div>
+                        <button onClick={() => { setIsToolsOpen(false); setIsSurpriseOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-purple-300 hover:bg-purple-500/15 hover:text-purple-200 transition-all text-left cursor-pointer group">
+                          <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform"><Sparkles size={14} className="animate-pulse" /></div>
+                          <div><div className="font-bold">Iznenadi me!</div><div className="text-[9px] text-zinc-400 font-normal">Nasumična epizoda ili film</div></div>
                         </button>
-
-                        <button
-                          onClick={() => {
-                            setIsToolsOpen(false);
-                            setExportInitialTab('web-html');
-                            setIsExportModalOpen(true);
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group"
-                        >
-                          <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
-                            <Download size={14} />
-                          </div>
-                          <div>
-                            <div className="font-bold">HTML Izvoz Kataloga</div>
-                            <div className="text-[9px] text-zinc-400 font-normal">Preuzmi samostalni web fajl</div>
-                          </div>
+                        <button onClick={() => { setIsToolsOpen(false); setExportInitialTab('web-html'); setIsExportModalOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group">
+                          <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform"><Download size={14} /></div>
+                          <div><div className="font-bold">HTML Izvoz Kataloga</div><div className="text-[9px] text-zinc-400 font-normal">Preuzmi samostalni web fajl</div></div>
                         </button>
-
-                        <button
-                          onClick={() => {
-                            setIsToolsOpen(false);
-                            setExportInitialTab('json-backup');
-                            setIsExportModalOpen(true);
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group"
-                        >
-                          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
-                            <Database size={14} />
-                          </div>
-                          <div>
-                            <div className="font-bold">JSON Baza Podataka</div>
-                            <div className="text-[9px] text-zinc-400 font-normal">Sigurnosna kopija i uvoz</div>
-                          </div>
+                        <button onClick={() => { setIsToolsOpen(false); setExportInitialTab('json-backup'); setIsExportModalOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group">
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform"><Database size={14} /></div>
+                          <div><div className="font-bold">JSON Baza Podataka</div><div className="text-[9px] text-zinc-400 font-normal">Sigurnosna kopija i uvoz</div></div>
                         </button>
-
-                        <button
-                          onClick={() => {
-                            setIsToolsOpen(false);
-                            handleManualSave();
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-emerald-300 hover:bg-emerald-500/15 transition-all text-left cursor-pointer group"
-                        >
-                          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                            <Save size={14} />
-                          </div>
-                          <div>
-                            <div className="font-bold">Spasi Sve Promjene</div>
-                            <div className="text-[9px] text-zinc-400 font-normal">Osiguraj podatke u bazi</div>
-                          </div>
+                        <button onClick={() => { setIsToolsOpen(false); handleManualSave(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-emerald-300 hover:bg-emerald-500/15 transition-all text-left cursor-pointer group">
+                          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform"><Save size={14} /></div>
+                          <div><div className="font-bold">Spasi Sve Promjene</div><div className="text-[9px] text-zinc-400 font-normal">Osiguraj podatke u bazi</div></div>
                         </button>
-
-                        <button
-                          onClick={() => {
-                            setIsToolsOpen(false);
-                            setShowIntro(true);
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 transition-all text-left cursor-pointer group"
-                        >
-                          <div className="w-7 h-7 rounded-lg bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-yellow-400 group-hover:scale-105 transition-transform">
-                            <Sparkles size={14} />
-                          </div>
-                          <div>
-                            <div className="font-bold">Ponovi Uvodnu Animaciju</div>
-                            <div className="text-[9px] text-zinc-400 font-normal">Cinema Grafik uvod</div>
-                          </div>
+                        <button onClick={() => { setIsToolsOpen(false); setShowIntro(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 transition-all text-left cursor-pointer group">
+                          <div className="w-7 h-7 rounded-lg bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-yellow-400 group-hover:scale-105 transition-transform"><Sparkles size={14} className="animate-spin-slow" /></div>
+                          <div><div className="font-bold">Ponovi Uvodnu Animaciju</div><div className="text-[9px] text-zinc-400 font-normal">Cinema Grafik uvod</div></div>
                         </button>
-
                         <div className="pt-1 border-t border-zinc-900 mt-1">
-                          <button
-                            onClick={() => {
-                              setIsToolsOpen(false);
-                              handleResetToDefaults();
-                            }}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-red-400 hover:bg-red-500/15 transition-all text-left cursor-pointer group"
-                          >
-                            <div className="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-105 transition-transform">
-                              <RotateCcw size={14} />
-                            </div>
-                            <div>
-                              <div className="font-bold">Resetuj Sve Podatke</div>
-                              <div className="text-[9px] text-zinc-400 font-normal">Vrati na početne naslove</div>
-                            </div>
+                          <button onClick={() => { setIsToolsOpen(false); handleResetToDefaults(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-red-400 hover:bg-red-500/15 transition-all text-left cursor-pointer group">
+                            <div className="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-105 transition-transform"><RotateCcw size={14} /></div>
+                            <div><div className="font-bold">Resetuj Sve Podatke</div><div className="text-[9px] text-zinc-400 font-normal">Vrati na početne naslove</div></div>
                           </button>
                         </div>
                       </motion.div>
@@ -1664,7 +1574,6 @@ export default function App() {
                 </AnimatePresence>
               </div>
 
-              {/* PROFIL KORISNIKA / LOGIN */}
               <div className="relative">
                 {isAuthLoading ? (
                   <div className="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
@@ -1674,12 +1583,11 @@ export default function App() {
                   <button
                     onClick={() => setIsProfileOpen(true)}
                     className="flex items-center gap-1.5 focus:outline-none group cursor-pointer animate-fade-in"
-                    title={`Profil: ${userProfile?.displayName || user.displayName}`}
                   >
                     <div className="relative">
                       <img 
                         src={userProfile?.photoURL || user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80'} 
-                        alt={userProfile?.displayName || user.displayName || 'Korisnik'} 
+                        alt="Korisnik" 
                         className="w-9 h-9 rounded-full border-2 border-yellow-400 group-hover:border-yellow-500 transition object-cover"
                         referrerPolicy="no-referrer"
                       />
@@ -1693,11 +1601,9 @@ export default function App() {
                       className={`w-9 h-9 rounded-full bg-zinc-900 border flex items-center justify-center transition cursor-pointer ${
                         showSignInDropdown ? 'border-yellow-400 text-yellow-400' : 'border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
                       }`}
-                      title="Prijavite se s Google-om"
                     >
                       <User size={16} />
                     </button>
-
                     <AnimatePresence>
                       {showSignInDropdown && (
                         <motion.div
@@ -1710,10 +1616,15 @@ export default function App() {
                           <div className="space-y-1">
                             <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Prijavite Se</h4>
                             <p className="text-[10px] text-zinc-400 leading-relaxed">
-                              Prijavite se Google računom kako biste sinkronizirali svoj katalog i pregledali doprinose!
+                              Prijavite se Google računom kako biste sinkronizirali svoj katalog!
                             </p>
                           </div>
-
+                          {syncError && (
+                            <div className="bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl flex gap-2 text-[10px] text-red-400 font-bold leading-relaxed">
+                              <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                              <span>{syncError}</span>
+                            </div>
+                          )}
                           <button
                             onClick={async () => {
                               try {
