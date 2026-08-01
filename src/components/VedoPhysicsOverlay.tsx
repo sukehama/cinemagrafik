@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-const vedoImg = '/images/vedo_foot.jpg';
+
+export const VEDO_IMAGE_SRC = '/vedo_foot.jpg';
 
 interface VedoPhysicsOverlayProps {
   isActive: boolean;
@@ -18,8 +19,6 @@ interface VedoParticle {
   vRot: number;
   bounces: number;
 }
-
-export const VEDO_IMAGE_SRC = vedoImg;
 
 export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps) {
   const [showFlash, setShowFlash] = useState(false);
@@ -84,7 +83,7 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
 
     let animationFrameId: number;
     const img = new Image();
-    img.src = vedoImg;
+    img.src = VEDO_IMAGE_SRC;
 
     let width = (canvas.width = window.innerWidth);
     let height = (canvas.height = window.innerHeight);
@@ -103,7 +102,7 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
     // Spawn new Vedos periodically
     const spawnInterval = setInterval(() => {
       if (particles.length < 35) {
-        const size = 140 + Math.random() * 120;
+        const size = 60 + Math.random() * 70;
         particles.push({
           id: particleIdCounter++,
           x: Math.random() * (width - size),
@@ -120,12 +119,9 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
     }, 450);
 
     const gravity = 0.45;
-    const imgAspect = () => img.naturalWidth > 0 ? img.naturalHeight / img.naturalWidth : 1.6;
 
     const loop = () => {
       ctx.clearRect(0, 0, width, height);
-      const aspect = imgAspect();
-      const renderedHeight = p_size => p_size * aspect;
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
@@ -137,9 +133,8 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
         p.rotation += p.vRot;
 
         // Bounce off bottom floor
-        const h = renderedHeight(p.size);
-        if (p.y + h >= height) {
-          p.y = height - h;
+        if (p.y + p.size >= height) {
+          p.y = height - p.size;
           p.vy = -p.vy * 0.72; // restitution
           p.vx *= 0.95; // friction
           p.bounces++;
@@ -156,12 +151,13 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
           p.x = width - p.size;
           p.vx = -p.vx * 0.8;
         }
+
         // Render Vedo image onto canvas
         ctx.save();
         ctx.translate(p.x + p.size / 2, p.y + p.size / 2);
         ctx.rotate(p.rotation);
         if (img.complete && img.naturalWidth > 0) {
-          ctx.drawImage(img, -p.size / 2, -p.size * aspect / 2, p.size, p.size * aspect);
+          ctx.drawImage(img, -p.size / 2, -p.size / 2, p.size, p.size * 1.6);
         } else {
           ctx.fillStyle = '#eab308';
           ctx.beginPath();
@@ -198,7 +194,7 @@ export default function VedoPhysicsOverlay({ isActive }: VedoPhysicsOverlayProps
             className="fixed inset-0 bg-yellow-400/90 backdrop-blur-xl z-[100000] flex flex-col items-center justify-center text-zinc-955 p-6 text-center"
           >
             <motion.img
-              src={vedoImg}
+              src={VEDO_IMAGE_SRC}
               alt="Vedo Dela"
               className="w-48 h-80 object-contain drop-shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-bounce mb-4"
             />

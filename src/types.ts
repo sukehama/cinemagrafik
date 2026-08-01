@@ -32,21 +32,25 @@ export interface Episode {
   episodeNumber: number;
   name: string;
   rating: number;
-  year?: string | number;      // Dodano: Godina izlaska epizode
-  releaseDate?: string;       // Dodano: Tačan datum izlaska
   imageUrl?: string;
   youtubeUrl?: string;
   overview?: string;
   guestReviews?: GuestReview[];
   actors?: Actor[];
-  featuredMoments?: FeaturedMoment[];
+  featuredMoments?: FeaturedMoment[]; // Optional key moments
+  releaseYear?: string | number;
+  airDate?: string;
+  runtime?: string;
+  director?: string;
+  writer?: string;
+  // Custom hyperlink fields
   linkText?: string;
   linkTargetId?: string;
 }
 
 export interface Season {
   seasonNumber: number;
-  seasonName?: string;
+  seasonName?: string; // For Cinematic Universes (e.g. "Phase 1: Early Days" / "Faza 1")
   episodes: Episode[];
 }
 
@@ -66,11 +70,15 @@ export interface RatingEntry {
   posterUrl: string;
   bannerUrl: string;
   votesCount?: number;
-  guestVotes?: GuestVote[];
-  movieActors?: Actor[];
-  movieReviews?: GuestReview[];
-  movieFeaturedMoments?: FeaturedMoment[];
+  guestVotes?: GuestVote[]; // Legacy global guest votes for movies or generic backward compatibility
+  movieActors?: Actor[];    // Cast listed for single-movie entries
+  movieReviews?: GuestReview[]; // Movie reviews
+  movieFeaturedMoments?: FeaturedMoment[]; // Movie clips
+
+  // Applicable to shows and universes (where "seasons" are categories in universes):
   seasons?: Season[];
+  
+  // Applicable to movies:
   movieRating?: number;
   movieYoutubeUrl?: string;
   movieDuration?: string;

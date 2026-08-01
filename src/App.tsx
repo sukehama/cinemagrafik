@@ -35,17 +35,45 @@ import {
   ContributionLog, 
   UserProfile,
   updateUserProfile,
-  getUserProfile,
-  getUserRole,
-  canEditDirectly,
-  canCreateContent,
-  submitPendingEntry,
-  UserRole
+  getUserProfile
 } from './firebaseSync';
-import AdminPanel from './components/AdminPanel';
-import MigrationPrompt from './components/MigrationPrompt';
 
-import { Tv, Film, Plus, Search, User, Star, RotateCcw, Trash2, Play, Grid2x2 as GridIcon, Clock, Info, ChevronDown, ArrowUpDown, ChartBar as BarChart2, Download, CreditCard as Edit, X, Sparkles, Save, Check, Database, Users, Trophy, ChevronLeft, ChevronRight, Hop as Home, LogOut, RefreshCw, CircleAlert as AlertCircle, Layers, SlidersHorizontal, MoveVertical as MoreVertical, MessageSquare, Crown, Lock } from 'lucide-react';
+import { 
+  Tv, 
+  Film, 
+  Plus, 
+  Search, 
+  User, 
+  Star, 
+  RotateCcw, 
+  Trash2, 
+  Play, 
+  Grid as GridIcon, 
+  Clock, 
+  Info,
+  ChevronDown,
+  ArrowUpDown,
+  BarChart2,
+  Download,
+  Edit,
+  X,
+  Sparkles,
+  Save,
+  Check,
+  Database,
+  Users,
+  Trophy,
+  ChevronLeft,
+  ChevronRight,
+  Home,
+  LogOut,
+  RefreshCw,
+  AlertCircle,
+  Layers,
+  SlidersHorizontal,
+  MoreVertical,
+  MessageSquare
+} from 'lucide-react';
 
 export default function App() {
   // Cinematic Intro state
@@ -173,17 +201,6 @@ export default function App() {
   const [socialContributions, setSocialContributions] = useState<ContributionLog[]>([]);
   const [isSocialContributionsLoading, setIsSocialContributionsLoading] = useState(false);
 
-  // Admin Panel & Migration Prompt States
-  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
-  const [showMigrationPrompt, setShowMigrationPrompt] = useState(false);
-  const [showPendingToast, setShowPendingToast] = useState(false);
-
-  // Derived role helpers
-  const userRole: UserRole = getUserRole(userProfile);
-  const canCreate = canCreateContent(userProfile);
-  const canEdit = canEditDirectly(userProfile);
-  const isAdmin = userRole === 'admin';
-
   const handleProfileUpdate = async (updatedData: Partial<UserProfile>) => {
     if (!user) return;
     try {
@@ -307,40 +324,24 @@ export default function App() {
     persistData();
   }, [entries, isLoaded]);
 
-// A. Listen to Firebase Authentication changes and sync user profile
+  // A. Listen to Firebase Authentication changes and sync user profile
   useEffect(() => {
-    const handleAuthFlow = async () => {
-      // 1. Obavezno provjeri rezultat redirecta kada se vrati sa Google-a
-      try {
-        const redirectUser = await checkRedirectResult();
-        if (redirectUser) {
-          setUser(redirectUser);
-          const profile = await syncUserProfile(redirectUser);
+    checkRedirectResult();
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setIsAuthLoading(false);
+      if (currentUser) {
+        try {
+          const profile = await syncUserProfile(currentUser);
           setUserProfile(profile);
+        } catch (err) {
+          console.error("Failed to sync user profile on auth state change:", err);
         }
-      } catch (err) {
-        console.error("Greška pri obradi redirect prijave:", err);
+      } else {
+        setUserProfile(null);
       }
-
-      // 2. Standardni slušač stanja prijave
-      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-        setUser(currentUser);
-        setIsAuthLoading(false);
-        if (currentUser) {
-          try {
-            const profile = await syncUserProfile(currentUser);
-            setUserProfile(profile);
-          } catch (err) {
-            console.error("Failed to sync user profile on auth state change:", err);
-          }
-        } else {
-          setUserProfile(null);
-        }
-      });
-      return unsubscribe;
-    };
-
-    handleAuthFlow();
+    });
+    return unsubscribe;
   }, []);
 
   // B. Subscribe to Firestore real-time sync for universal catalog after local IndexedDB load
@@ -373,85 +374,64 @@ export default function App() {
   // C. Synchronize local catalog edits automatically back to the universal Firestore collection
   useEffect(() => {
     if (!isLoaded || !isFirestoreSyncedRef.current) return;
-
+    
     const syncLocalChangesToFirestore = async () => {
       if (isApplyingSnapshotRef.current) {
+        // This state update came from Firestore, so we don't write it back
         isApplyingSnapshotRef.current = false;
         prevEntriesRef.current = entries;
         return;
       }
-
+      
+      // Compare entries with prevEntriesRef.current to find deleted or modified items
       const prevMap = new Map(prevEntriesRef.current.map(e => [e.id, e]));
       const currentMap = new Map(entries.map(e => [e.id, e]));
-
-      // For regular users, route through pending submissions instead of direct writes
-      const usePending = userProfile && !canEditDirectly(userProfile);
-
+      
       // 1. Find deleted entries
       for (const prevEntry of prevEntriesRef.current) {
         if (!currentMap.has(prevEntry.id)) {
-          if (usePending) {
-            try {
-              await submitPendingEntry(prevEntry, 'delete', userProfile!);
-              setShowPendingToast(true);
-              setTimeout(() => setShowPendingToast(false), 4000);
-            } catch (err) {
-              console.error(`Failed to submit pending deletion for ${prevEntry.name}:`, err);
-            }
-          } else {
-            console.log(`[Sync] Local deletion detected for: ${prevEntry.name}`);
-            try {
-              await deleteEntryFromFirestore(
-                prevEntry.id,
-                prevEntry.name,
-                user?.uid,
-                userProfile?.displayName || user?.displayName || undefined,
-                userProfile?.photoURL || user?.photoURL || undefined
-              );
-            } catch (err) {
-              console.error(`Failed to sync deletion for ${prevEntry.name}:`, err);
-            }
+          console.log(`[Sync] Local deletion detected for: ${prevEntry.name}`);
+          try {
+            await deleteEntryFromFirestore(
+              prevEntry.id, 
+              prevEntry.name, 
+              user?.uid, 
+              userProfile?.displayName || user?.displayName || undefined,
+              userProfile?.photoURL || user?.photoURL || undefined
+            );
+          } catch (err) {
+            console.error(`Failed to sync deletion for ${prevEntry.name}:`, err);
           }
         }
       }
-
+      
       // 2. Find added or modified entries
       for (const currentEntry of entries) {
         const prevEntry = prevMap.get(currentEntry.id);
         const isNew = !prevEntry;
         const isModified = prevEntry && JSON.stringify(prevEntry) !== JSON.stringify(currentEntry);
-
-        if (isNew || isModified) {
-          if (usePending) {
-            try {
-              await submitPendingEntry(currentEntry, isNew ? 'add' : 'edit', userProfile!);
-              setShowPendingToast(true);
-              setTimeout(() => setShowPendingToast(false), 4000);
-            } catch (err) {
-              console.error(`Failed to submit pending ${isNew ? 'add' : 'edit'} for ${currentEntry.name}:`, err);
-            }
-          } else {
-            console.log(`[Sync] Local ${isNew ? 'addition' : 'modification'} detected for: ${currentEntry.name}`);
-            try {
-              await saveEntryToFirestore(
-                currentEntry,
-                isNew ? 'add' : 'edit',
-                user?.uid,
-                userProfile?.displayName || user?.displayName || undefined,
-                userProfile?.photoURL || user?.photoURL || undefined
-              );
-            } catch (err) {
-              console.error(`Failed to sync ${isNew ? 'add' : 'edit'} for ${currentEntry.name}:`, err);
-            }
-          }
-        }
-      }
-
-      prevEntriesRef.current = entries;
-    };
-
-    syncLocalChangesToFirestore();
-  }, [entries, isLoaded, user, userProfile]);
+        
+         if (isNew || isModified) {
+           console.log(`[Sync] Local ${isNew ? 'addition' : 'modification'} detected for: ${currentEntry.name}`);
+           try {
+             await saveEntryToFirestore(
+               currentEntry,
+               isNew ? 'add' : 'edit',
+               user?.uid,
+               userProfile?.displayName || user?.displayName || undefined,
+               userProfile?.photoURL || user?.photoURL || undefined
+             );
+           } catch (err) {
+             console.error(`Failed to sync ${isNew ? 'add' : 'edit'} for ${currentEntry.name}:`, err);
+           }
+         }
+       }
+       
+       prevEntriesRef.current = entries;
+     };
+     
+     syncLocalChangesToFirestore();
+   }, [entries, isLoaded, user, userProfile]);
 
   // D. Load contributions history when user opens the profile view
   useEffect(() => {
@@ -470,18 +450,6 @@ export default function App() {
       loadContributions();
     }
   }, [isProfileOpen]);
-
-  // D2. Show migration prompt when a user logs in and has local data that hasn't been synced yet
-  const migrationPromptShown = useRef(false);
-  useEffect(() => {
-    if (userProfile && isLoaded && entries.length > 0 && !migrationPromptShown.current && !isFirestoreSyncedRef.current) {
-      migrationPromptShown.current = true;
-      const dismissed = localStorage.getItem('migration-prompt-dismissed');
-      if (!dismissed) {
-        setShowMigrationPrompt(true);
-      }
-    }
-  }, [userProfile, isLoaded, entries.length]);
 
   useEffect(() => {
     try {
@@ -593,41 +561,92 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Compute matched entries and actors for autocomplete universal search
-// Compute matched entries, actors AND episodes for universal search
+  // Compute matched entries, actors, episodes, and user profiles for autocomplete universal search
   const universalSearchResults = useMemo(() => {
     const query = universalQuery.toLowerCase().trim();
-    if (!query) return { entries: [], actors: [], episodes: [] };
+    if (!query) return { entries: [], actors: [], episodes: [], profiles: [] };
 
-    // 1. Pretraga filmova i serija
-    const matchedEntries = entries.filter(e => e.name.toLowerCase().includes(query));
+    // 1. Match movies, shows, universes
+    const matchedEntries = entries.filter(e => e.name.toLowerCase().includes(query) || e.description.toLowerCase().includes(query));
 
-    // 2. Pretraga glumaca
-    const matchedActors = allActorsWithAppearances.filter(a => 
-      a.actor.name.toLowerCase().includes(query) ||
-      (a.actor.characterName && a.actor.characterName.toLowerCase().includes(query))
-    );
+    // 2. Match actors (by name, primary characterName, or specific role/episode names)
+    const matchedActors = allActorsWithAppearances.filter(a => {
+      const nameMatch = a.actor.name.toLowerCase().includes(query);
+      const characterMatch = a.actor.characterName && a.actor.characterName.toLowerCase().includes(query);
+      const hasInRoles = a.appearances.some(app => 
+        (app.rawActor.characterName && app.rawActor.characterName.toLowerCase().includes(query)) ||
+        (app.epName && app.epName.toLowerCase().includes(query))
+      );
+      return nameMatch || characterMatch || hasInRoles;
+    });
 
-    // 3. Pretraga pojedinačnih epizoda
+    // 3. Match individual episodes across all shows and universes
     const matchedEpisodes: { entry: RatingEntry; seasonNum: number; episode: Episode }[] = [];
-    entries.forEach(e => {
-      if (e.seasons) {
-        e.seasons.forEach(s => {
-          s.episodes.forEach(ep => {
-            if (ep.name.toLowerCase().includes(query)) {
-              matchedEpisodes.push({ entry: e, seasonNum: s.seasonNumber, episode: ep });
-            }
-          });
+    entries.forEach(entry => {
+      if (entry.seasons) {
+        entry.seasons.forEach(s => {
+          if (s.episodes) {
+            s.episodes.forEach(ep => {
+              const epTag = `s${s.seasonNumber}e${ep.episodeNumber}`.toLowerCase();
+              const epShortTag = `e${ep.episodeNumber}`.toLowerCase();
+              const nameMatch = ep.name.toLowerCase().includes(query);
+              const tagMatch = epTag.includes(query) || epShortTag === query;
+              const yearMatch = ep.releaseYear && String(ep.releaseYear).toLowerCase().includes(query);
+              const dirMatch = ep.director && ep.director.toLowerCase().includes(query);
+              const overviewMatch = ep.overview && ep.overview.toLowerCase().includes(query);
+
+              if (nameMatch || tagMatch || yearMatch || dirMatch || overviewMatch) {
+                matchedEpisodes.push({
+                  entry,
+                  seasonNum: s.seasonNumber,
+                  episode: ep
+                });
+              }
+            });
+          }
         });
       }
     });
 
+    // 4. Match user profiles
+    const matchedProfilesMap = new Map<string, UserProfile>();
+    if (userProfile && (
+      userProfile.displayName?.toLowerCase().includes(query) ||
+      userProfile.email?.toLowerCase().includes(query) ||
+      userProfile.bio?.toLowerCase().includes(query)
+    )) {
+      matchedProfilesMap.set(userProfile.uid, userProfile);
+    }
+    if (selectedSocialProfile && (
+      selectedSocialProfile.displayName?.toLowerCase().includes(query) ||
+      selectedSocialProfile.email?.toLowerCase().includes(query) ||
+      selectedSocialProfile.bio?.toLowerCase().includes(query)
+    )) {
+      matchedProfilesMap.set(selectedSocialProfile.uid, selectedSocialProfile);
+    }
+    recentContributions.forEach(c => {
+      if (c.userName && c.userName.toLowerCase().includes(query)) {
+        if (!matchedProfilesMap.has(c.userId)) {
+          matchedProfilesMap.set(c.userId, {
+            uid: c.userId,
+            displayName: c.userName,
+            photoURL: c.userPhotoUrl,
+            email: '',
+            createdAt: c.createdAt,
+            lastActive: c.createdAt,
+            contributionsCount: 1
+          });
+        }
+      }
+    });
+
     return {
-      entries: matchedEntries,
-      actors: matchedActors,
-      episodes: matchedEpisodes
+      entries: matchedEntries.slice(0, 6),
+      actors: matchedActors.slice(0, 6),
+      episodes: matchedEpisodes.slice(0, 8),
+      profiles: Array.from(matchedProfilesMap.values()).slice(0, 6)
     };
-  }, [entries, allActorsWithAppearances, universalQuery]);
+  }, [entries, allActorsWithAppearances, universalQuery, userProfile, selectedSocialProfile, recentContributions]);
 
   // Synchronize activeId boundaries
   useEffect(() => {
@@ -1388,12 +1407,12 @@ export default function App() {
       {/* MAIN CONTAINER */}
       <div className="relative z-10 flex flex-col min-h-screen">
         
-{/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
+        {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
         <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3 backdrop-blur-2xl bg-zinc-950/90 border-b border-zinc-800/80 shadow-2xl transition-all">
-          <div className="max-w-7xl mx-auto flex flex-col lg:grid lg:grid-cols-[1fr_auto_1fr] items-center gap-4">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
             
-            {/* LIJEVO: LOGO & SELEKTOR (Uvijek ostaje lijevo) */}
-            <div className="flex items-center justify-start gap-3 w-full lg:w-auto">
+            {/* TOP LEFT: BRAND LOGO & QUICK ENTRY SELECTOR */}
+            <div className="flex items-center justify-between md:justify-start gap-3">
               <button
                 onClick={() => { 
                   handleLogoClick(); 
@@ -1401,7 +1420,7 @@ export default function App() {
                   setSelectedActorName(null); 
                 }}
                 className="flex items-center gap-2.5 group cursor-pointer"
-                title={isVedoMode ? "Vedo Dela Režim" : "Cinema Grafik"}
+                title={isVedoMode ? "Vedo Dela Režim (Klikni 6x za isključivanje)" : "Cinema Grafik (Klikni 6x za iznenađenje)"}
               >
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-yellow-400 to-amber-500 flex items-center justify-center text-zinc-955 font-black shadow-[0_0_15px_rgba(250,204,21,0.35)] group-hover:scale-105 transition-transform overflow-hidden">
                   {isVedoMode ? (
@@ -1410,10 +1429,14 @@ export default function App() {
                     <Film size={20} className="stroke-[2.5]" />
                   )}
                 </div>
-                <div className="text-left hidden sm:block">
+                <div className="text-left">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-black uppercase tracking-wider text-zinc-100 group-hover:text-yellow-400 transition-colors">
-                      {isVedoMode ? <>Vedo <span className="text-yellow-400">Dela</span></> : <>Cinema<span className="text-yellow-400">Grafik</span></>}
+                      {isVedoMode ? (
+                        <>Vedo <span className="text-yellow-400">Dela</span></>
+                      ) : (
+                        <>Cinema<span className="text-yellow-400">Grafik</span></>
+                      )}
                     </span>
                   </div>
                   <div className="text-[10px] text-zinc-400 font-mono">
@@ -1422,8 +1445,9 @@ export default function App() {
                 </div>
               </button>
 
+              {/* QUICK ENTRY DROPDOWN MENU (Jump directly to any Movie/Show/Universe) */}
               {entries.length > 0 && (
-                <div className="relative hidden xl:block">
+                <div className="relative hidden lg:block">
                   <select
                     value={activeEntry?.id || ''}
                     onChange={(e) => {
@@ -1433,7 +1457,7 @@ export default function App() {
                         setSelectedActorName(null);
                       }
                     }}
-                    className="bg-zinc-900/90 text-zinc-200 text-xs font-bold py-1.5 px-3 pr-8 rounded-xl border border-zinc-800/90 hover:border-yellow-400/50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-yellow-400/40 truncate max-w-[180px] shadow-inner"
+                    className="bg-zinc-900/90 text-zinc-200 text-xs font-bold py-1.5 px-3 pr-8 rounded-xl border border-zinc-800/90 hover:border-yellow-400/50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-yellow-400/40 truncate max-w-[210px] shadow-inner"
                   >
                     <option value="" disabled>-- Izaberi Naslov --</option>
                     {entries.map(e => (
@@ -1447,8 +1471,34 @@ export default function App() {
               )}
             </div>
 
-            {/* SREDINA: NAVIGACIJA (Sada je SAVRŠENO centrirana zahvaljujući Grid-u) */}
-            <nav className="flex items-center justify-center gap-1.5 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl mx-auto w-fit">
+            {/* TOP CENTER: FLOATING NAVIGATION TABS DOCK (Icon-only by default, expands text smoothly on hover) */}
+            <nav className="flex items-center justify-center gap-2 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl max-w-full">
+              {/* Magnifier Search Button - placed to the left of Home tab */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUniversalSearchOpen(true);
+                  setUniversalQuery('');
+                }}
+                onMouseEnter={() => setHoveredTab('search-dock')}
+                onMouseLeave={() => setHoveredTab(null)}
+                className={`group relative flex items-center justify-center h-9 px-3 rounded-xl transition-all duration-300 ease-out cursor-pointer shrink-0 border ${
+                  hoveredTab === 'search-dock'
+                    ? '-translate-y-1 scale-105 z-20 bg-zinc-900 border-yellow-400 text-yellow-400 shadow-[0_4px_20px_rgba(250,204,21,0.25)]'
+                    : 'z-0 bg-zinc-900/60 text-yellow-400 border-zinc-800/80 hover:bg-zinc-900 hover:text-yellow-300'
+                }`}
+                title="Univerzalna Pretraga (Ctrl+K)"
+              >
+                <Search size={17} className="shrink-0 transition-transform duration-300" />
+                <div className={`overflow-hidden transition-all duration-300 ease-out flex items-center ${
+                  hoveredTab === 'search-dock' ? 'max-w-xs opacity-100 ml-2' : 'max-w-0 opacity-0 ml-0'
+                }`}>
+                  <span className="text-xs font-black uppercase tracking-wider whitespace-nowrap">
+                    Pretraga
+                  </span>
+                </div>
+              </button>
+
               {[
                 { id: 'home', label: 'Meni', icon: Home },
                 { id: 'katalog', label: 'Katalog', icon: Film },
@@ -1481,6 +1531,7 @@ export default function App() {
                   >
                     <Icon size={17} className="shrink-0 transition-transform duration-300" />
                     
+                    {/* Silky smooth text expansion on hover */}
                     <div className={`overflow-hidden transition-all duration-300 ease-out flex items-center ${
                       isHovered ? 'max-w-xs opacity-100 ml-2.5' : 'max-w-0 opacity-0 ml-0'
                     }`}>
@@ -1498,55 +1549,41 @@ export default function App() {
               })}
             </nav>
 
-            {/* DESNO: PRETRAGA, ALATI I PROFIL (Gurnuto skroz na desnu ivicu) */}
-            <div className="flex items-center justify-end gap-2.5 w-full lg:w-auto ml-auto">
-              
+            {/* TOP RIGHT: ACTIONS, TOOLS & USER PROFILE */}
+            <div className="flex items-center gap-3">
+              {/* PRIMARY ACTION: ADD NEW ENTRY (Sleek Icon-Only Plus Button) */}
               <button
-                onClick={() => { setIsUniversalSearchOpen(true); setUniversalQuery(''); }}
-                className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-yellow-400 transition-all duration-200 cursor-pointer shrink-0 hover:scale-105 active:scale-95"
-                title="Pretraži (Ctrl + K)"
+                onClick={() => setIsAddModalOpen(true)}
+                id="btn-open-add-slate"
+                className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black rounded-xl shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:shadow-[0_0_25px_rgba(250,204,21,0.5)] hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
+                title="Dodaj Novi Naslov (Film, Serija ili Univerzum)"
               >
-                <Search size={16} />
+                <Plus size={18} strokeWidth={3} />
               </button>
 
-              {canCreate && (
-                <button
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black rounded-xl shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0"
-                  title="Dodaj Novi Naslov"
-                >
-                  <Plus size={18} strokeWidth={3} />
-                </button>
-              )}
-
-              {isAdmin && (
-                <button
-                  onClick={() => setIsAdminPanelOpen(true)}
-                  className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400/20 to-amber-500/20 hover:from-yellow-400/30 hover:to-amber-500/30 text-yellow-400 font-black rounded-xl border border-yellow-400/30 hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0"
-                  title="Admin Panel"
-                >
-                  <Crown size={16} />
-                </button>
-              )}
-
+              {/* TOOLS DROPDOWN MENU */}
               <div className="relative">
                 <button
                   onClick={() => setIsToolsOpen(!isToolsOpen)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  id="btn-tools-dropdown"
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all duration-200 cursor-pointer ${
                     isToolsOpen
                       ? 'bg-zinc-800 text-white border-yellow-400/50 shadow-[0_0_15px_rgba(250,204,21,0.15)]'
                       : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white'
                   }`}
+                  title="Upravljanje i dodatne alatke"
                 >
                   <SlidersHorizontal size={15} className="text-yellow-400" />
-                  <span className="hidden xl:inline">Alati</span>
-                  <ChevronDown size={14} className={`transform transition-transform ${isToolsOpen ? 'rotate-180 text-yellow-400' : 'text-zinc-500'}`} />
+                  <span className="hidden sm:inline">Alati</span>
+                  <ChevronDown size={14} className={`transform transition-transform duration-200 ${isToolsOpen ? 'rotate-180 text-yellow-400' : 'text-zinc-500'}`} />
                 </button>
 
                 <AnimatePresence>
                   {isToolsOpen && (
                     <>
+                      {/* Click away backdrop */}
                       <div className="fixed inset-0 z-40" onClick={() => setIsToolsOpen(false)} />
+
                       <motion.div
                         initial={{ opacity: 0, y: 8, scale: 0.96 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1555,33 +1592,121 @@ export default function App() {
                         className="absolute right-0 mt-2 w-64 bg-zinc-950/95 border border-zinc-800/90 rounded-2xl p-2 shadow-2xl z-50 text-left space-y-1 backdrop-blur-xl"
                       >
                         <div className="px-3 py-2 border-b border-zinc-900 mb-1 flex items-center justify-between">
-                          <span className="text-[10px] font-mono font-black uppercase tracking-widest text-zinc-400">Upravljanje & Alatke</span>
+                          <span className="text-[10px] font-mono font-black uppercase tracking-widest text-zinc-400">
+                            Upravljanje & Alatke
+                          </span>
                           <Sparkles size={12} className="text-yellow-400" />
                         </div>
-                        <button onClick={() => { setIsToolsOpen(false); setIsSurpriseOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-purple-300 hover:bg-purple-500/15 hover:text-purple-200 transition-all text-left cursor-pointer group">
-                          <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform"><Sparkles size={14} className="animate-pulse" /></div>
-                          <div><div className="font-bold">Iznenadi me!</div><div className="text-[9px] text-zinc-400 font-normal">Nasumična epizoda ili film</div></div>
+
+                        {/* Surprise Me */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setIsSurpriseOpen(true);
+                          }}
+                          id="btn-surprise-me"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-purple-300 hover:bg-purple-500/15 hover:text-purple-200 transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
+                            <Sparkles size={14} className="animate-pulse" />
+                          </div>
+                          <div>
+                            <div className="font-bold">Iznenadi me!</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Nasumična epizoda ili film</div>
+                          </div>
                         </button>
-                        <button onClick={() => { setIsToolsOpen(false); setExportInitialTab('web-html'); setIsExportModalOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group">
-                          <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform"><Download size={14} /></div>
-                          <div><div className="font-bold">HTML Izvoz Kataloga</div><div className="text-[9px] text-zinc-400 font-normal">Preuzmi samostalni web fajl</div></div>
+
+                        {/* HTML Export */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setExportInitialTab('web-html');
+                            setIsExportModalOpen(true);
+                          }}
+                          id="btn-open-export-hub"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
+                            <Download size={14} />
+                          </div>
+                          <div>
+                            <div className="font-bold">HTML Izvoz Kataloga</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Preuzmi samostalni web fajl</div>
+                          </div>
                         </button>
-                        <button onClick={() => { setIsToolsOpen(false); setExportInitialTab('json-backup'); setIsExportModalOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group">
-                          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform"><Database size={14} /></div>
-                          <div><div className="font-bold">JSON Baza Podataka</div><div className="text-[9px] text-zinc-400 font-normal">Sigurnosna kopija i uvoz</div></div>
+
+                        {/* JSON Database */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setExportInitialTab('json-backup');
+                            setIsExportModalOpen(true);
+                          }}
+                          id="btn-open-json-db"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 hover:text-white transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
+                            <Database size={14} />
+                          </div>
+                          <div>
+                            <div className="font-bold">JSON Baza Podataka</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Sigurnosna kopija i uvoz</div>
+                          </div>
                         </button>
-                        <button onClick={() => { setIsToolsOpen(false); handleManualSave(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-emerald-300 hover:bg-emerald-500/15 transition-all text-left cursor-pointer group">
-                          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform"><Save size={14} /></div>
-                          <div><div className="font-bold">Spasi Sve Promjene</div><div className="text-[9px] text-zinc-400 font-normal">Osiguraj podatke u bazi</div></div>
+
+                        {/* Manual Save */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            handleManualSave();
+                          }}
+                          id="btn-manual-sync-save"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-emerald-300 hover:bg-emerald-500/15 transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+                            <Save size={14} />
+                          </div>
+                          <div>
+                            <div className="font-bold">Spasi Sve Promjene</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Osiguraj podatke u bazi</div>
+                          </div>
                         </button>
-                        <button onClick={() => { setIsToolsOpen(false); setShowIntro(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 transition-all text-left cursor-pointer group">
-                          <div className="w-7 h-7 rounded-lg bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-yellow-400 group-hover:scale-105 transition-transform"><Sparkles size={14} className="animate-spin-slow" /></div>
-                          <div><div className="font-bold">Ponovi Uvodnu Animaciju</div><div className="text-[9px] text-zinc-400 font-normal">Cinema Grafik uvod</div></div>
+
+                        {/* Replay Intro */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setShowIntro(true);
+                          }}
+                          id="btn-replay-intro"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-zinc-200 hover:bg-zinc-900 transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-yellow-400 group-hover:scale-105 transition-transform">
+                            <Sparkles size={14} className="animate-spin-slow" />
+                          </div>
+                          <div>
+                            <div className="font-bold">Ponovi Uvodnu Animaciju</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Cinema Grafik uvod</div>
+                          </div>
                         </button>
+
                         <div className="pt-1 border-t border-zinc-900 mt-1">
-                          <button onClick={() => { setIsToolsOpen(false); handleResetToDefaults(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-red-400 hover:bg-red-500/15 transition-all text-left cursor-pointer group">
-                            <div className="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-105 transition-transform"><RotateCcw size={14} /></div>
-                            <div><div className="font-bold">Resetuj Sve Podatke</div><div className="text-[9px] text-zinc-400 font-normal">Vrati na početne naslove</div></div>
+                          {/* Reset defaults */}
+                          <button
+                            onClick={() => {
+                              setIsToolsOpen(false);
+                              handleResetToDefaults();
+                            }}
+                            id="btn-reset-data"
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-red-400 hover:bg-red-500/15 transition-all text-left cursor-pointer group"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-105 transition-transform">
+                              <RotateCcw size={14} />
+                            </div>
+                            <div>
+                              <div className="font-bold">Resetuj Sve Podatke</div>
+                              <div className="text-[9px] text-zinc-400 font-normal">Vrati na početne naslove</div>
+                            </div>
                           </button>
                         </div>
                       </motion.div>
@@ -1590,88 +1715,119 @@ export default function App() {
                 </AnimatePresence>
               </div>
 
-              <div className="relative">
-                {isAuthLoading ? (
-                  <div className="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-                    <RefreshCw size={14} className="text-zinc-500 animate-spin" />
-                  </div>
-                ) : user ? (
-                  <button
-                    onClick={() => setIsProfileOpen(true)}
-                    className="flex items-center gap-1.5 focus:outline-none group cursor-pointer animate-fade-in"
-                  >
-                    <div className="relative">
-                      <img 
-                        src={userProfile?.photoURL || user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80'} 
-                        alt="Korisnik" 
-                        className="w-9 h-9 rounded-full border-2 border-yellow-400 group-hover:border-yellow-500 transition object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                      <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-zinc-950 bg-emerald-400 animate-pulse" />
-                    </div>
-                  </button>
-                ) : (
+            {/* PROFILE / GOOGLE SIGN-IN BUTTON */}
+            <div className="relative">
+              {isAuthLoading ? (
+                <div className="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                  <RefreshCw size={14} className="text-zinc-500 animate-spin" />
+                </div>
+              ) : user ? (
+                // LOGGED IN: Beautiful profile image with status ring and click action
+                <button
+                  onClick={() => setIsProfileOpen(true)}
+                  className="flex items-center gap-1.5 focus:outline-none group cursor-pointer animate-fade-in"
+                  title={`Profil: ${userProfile?.displayName || user.displayName}`}
+                >
                   <div className="relative">
-                    <button
-                      onClick={() => setShowSignInDropdown(!showSignInDropdown)}
-                      className={`w-9 h-9 rounded-full bg-zinc-900 border flex items-center justify-center transition cursor-pointer ${
-                        showSignInDropdown ? 'border-yellow-400 text-yellow-400' : 'border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
-                      }`}
-                    >
-                      <User size={16} />
-                    </button>
-                    <AnimatePresence>
-                      {showSignInDropdown && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                          transition={{ duration: 0.15 }}
-                          className="absolute right-0 mt-2 w-72 bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-2xl z-50 text-left space-y-4"
-                        >
-                          <div className="space-y-1">
-                            <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Prijavite Se</h4>
-                            <p className="text-[10px] text-zinc-400 leading-relaxed">
-                              Prijavite se Google računom kako biste sinkronizirali svoj katalog!
-                            </p>
-                          </div>
-                          {syncError && (
-                            <div className="bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl flex gap-2 text-[10px] text-red-400 font-bold leading-relaxed">
-                              <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                              <span>{syncError}</span>
-                            </div>
-                          )}
-                          <button
-                            onClick={async () => {
-                              try {
-                                setSyncError(null);
-                                await loginWithGoogle();
-                                setShowSignInDropdown(false);
-                              } catch (err: any) {
-                                console.error("Google login error:", err);
-                                setSyncError(err.message || 'Prijava nije uspjela');
-                              }
-                            }}
-                            className="w-full flex items-center justify-center gap-2.5 bg-white hover:bg-zinc-100 text-zinc-955 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer shadow-lg"
-                          >
-                            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                            </svg>
-                            Google Prijava
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                    <img 
+                      src={userProfile?.photoURL || user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80'} 
+                      alt={userProfile?.displayName || user.displayName || 'Korisnik'} 
+                      className="w-9 h-9 rounded-full border-2 border-yellow-400 group-hover:border-yellow-500 transition object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-zinc-950 bg-emerald-400 animate-pulse" />
                   </div>
-                )}
-              </div>
+                </button>
+              ) : (
+                // NOT LOGGED IN: Empty profile outline icon. Click shows dropdown or triggers login.
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSignInDropdown(!showSignInDropdown)}
+                    className={`w-9 h-9 rounded-full bg-zinc-900 border flex items-center justify-center transition cursor-pointer ${
+                      showSignInDropdown ? 'border-yellow-400 text-yellow-400' : 'border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                    }`}
+                    title="Prijavite se s Google-om"
+                  >
+                    <User size={16} />
+                  </button>
 
+                  <AnimatePresence>
+                    {showSignInDropdown && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-72 bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-2xl z-50 text-left space-y-4"
+                      >
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Prijavite Se</h4>
+                          <p className="text-[10px] text-zinc-400 leading-relaxed">
+                            Prijavite se Google računom kako biste sinkronizirali svoj katalog i pregledali doprinose na svim uređajima!
+                          </p>
+                        </div>
+
+                        {syncError === 'unauthorized-domain' ? (
+                          <div className="bg-amber-950/50 border border-amber-900/60 p-3.5 rounded-xl space-y-2.5 text-amber-200">
+                            <div className="flex gap-2 text-[11px] font-black uppercase tracking-wider text-amber-400 items-center">
+                              <AlertCircle size={14} className="shrink-0" />
+                              <span>Autorizacija Domene</span>
+                            </div>
+                            <p className="text-[10px] text-zinc-300 leading-relaxed">
+                              Kako bi Google prijava radila u Tauri aplikaciji i web pregledu, morate dodati ove domene u svoju Firebase konzolu:
+                            </p>
+                            <div className="bg-zinc-950 p-2 rounded-lg text-[9px] font-mono text-zinc-300 space-y-1 select-all border border-zinc-900 leading-normal">
+                              <div>• <span className="text-yellow-400">tauri.localhost</span></div>
+                              <div>• <span className="text-yellow-400">localhost</span></div>
+                              <div>• <span className="text-yellow-400">ais-dev-tvw4rthsz5lns4cdupfdzq-407597925605.europe-west1.run.app</span></div>
+                              <div>• <span className="text-yellow-400">ais-pre-tvw4rthsz5lns4cdupfdzq-407597925605.europe-west1.run.app</span></div>
+                            </div>
+                            <div className="text-[9px] text-zinc-400 leading-relaxed pt-1 border-t border-zinc-900">
+                              <strong>Koraci:</strong> Otvorite <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-yellow-400 underline hover:text-yellow-300 font-bold">Firebase Konzolu</a>, idite na <strong>Authentication &rarr; Settings &rarr; Authorized domains</strong> i dodajte ih na popis.
+                            </div>
+                          </div>
+                        ) : syncError ? (
+                          <div className="bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl flex gap-2 text-[10px] text-red-400 font-bold leading-relaxed">
+                            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                            <span>{syncError}</span>
+                          </div>
+                        ) : null}
+
+                        <button
+                          onClick={async () => {
+                            try {
+                              setSyncError(null);
+                              await loginWithGoogle();
+                              setShowSignInDropdown(false);
+                            } catch (err: any) {
+                              console.error("Google login error:", err);
+                              let friendlyMsg = err.message || 'Prijava nije uspjela';
+                              if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain'))) {
+                                friendlyMsg = 'unauthorized-domain';
+                              }
+                              setSyncError(friendlyMsg);
+                            }
+                          }}
+                          className="w-full flex items-center justify-center gap-2.5 bg-white hover:bg-zinc-100 text-zinc-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer shadow-lg"
+                        >
+                          {/* Google logo icon */}
+                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                          </svg>
+                          Google Prijava
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
           </div>
-        </header>
+        </div>
+      </header>
 
       {/* CINEMATIC INTRO ANIMATION & AUDIO */}
       <CinematicIntro
@@ -1696,7 +1852,6 @@ export default function App() {
             <p className="text-zinc-300 text-xs sm:text-sm max-w-sm leading-relaxed">
               Dobrodošli u Cinema Grafik! Vaša baza ocjena je spremna. Započnite kreiranjem nove TV serije, filma ili Cinematic Universuma za praćenje i vizualizaciju.
             </p>
-            {canCreate ? (
             <button
               onClick={() => setIsAddModalOpen(true)}
               id="btn-add-first-title"
@@ -1704,7 +1859,6 @@ export default function App() {
             >
               <Plus size={16} strokeWidth={3} /> Dodaj Prvi Naslov
             </button>
-            ) : null}
           </div>
         ) : (
           <AnimatePresence mode="wait">
@@ -1735,14 +1889,12 @@ export default function App() {
                       </p>
                     </div>
                     <div className="shrink-0 flex flex-col sm:flex-row gap-3">
-                      {canCreate ? (
                       <button
                         onClick={() => setIsAddModalOpen(true)}
                         className="flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black px-5 py-3 rounded-2xl text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(250,204,21,0.25)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer"
                       >
                         <Plus size={15} strokeWidth={3} /> Dodaj Novi Naslov
                       </button>
-                      ) : null}
                       <button
                         onClick={() => setIsSurpriseOpen(true)}
                         className="flex items-center justify-center gap-2 bg-zinc-950/80 hover:bg-zinc-900 text-purple-300 border border-purple-500/40 px-5 py-3 rounded-2xl text-xs font-black tracking-wider uppercase hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
@@ -2010,7 +2162,7 @@ export default function App() {
                     handleSelectEntry(univId);
                     setActiveTab('katalog');
                   }}
-                  onAddNewUniverse={canCreate ? () => setIsAddModalOpen(true) : undefined}
+                  onAddNewUniverse={() => setIsAddModalOpen(true)}
                   onUpdateUniverse={(updatedUniverse) => {
                     setEntries(prev => prev.map(e => e.id === updatedUniverse.id ? updatedUniverse : e));
                   }}
@@ -2065,10 +2217,7 @@ export default function App() {
                 exit={{ opacity: 0, x: 16 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
-                <ChatView 
-  currentUserProfile={userProfile} 
-  onSelectUser={(userId) => handleOpenSocialProfile(userId)}
-/>
+                <ChatView currentUserProfile={userProfile} />
               </motion.div>
             ) : (
               <motion.div
@@ -2225,7 +2374,6 @@ export default function App() {
                         )}
 
                         {/* Edit Specifications Icon */}
-                        {canCreate && (
                         <button
                           onClick={() => setIsEditModalOpen(true)}
                           id="btn-edit-active-attributes"
@@ -2234,10 +2382,8 @@ export default function App() {
                         >
                           <Edit size={13} /> Uredi Detalje
                         </button>
-                        )}
 
                         {/* Delete this title icon */}
-                        {canCreate && (
                         <button
                           onClick={handleDeleteActiveEntry}
                           id="btn-delete-active-slate"
@@ -2246,7 +2392,6 @@ export default function App() {
                         >
                           <Trash2 size={13} /> Obriši Naslov
                         </button>
-                        )}
                       </div>
                     </div>
 
@@ -3129,6 +3274,45 @@ export default function App() {
                       </div>
                     )}
 
+                    {/* Individual Episodes results */}
+                    {universalSearchResults.episodes.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-[10px] font-black uppercase text-yellow-400 tracking-wider flex items-center gap-1">
+                          <Tv size={10} /> Pojedinačne Epizode ({universalSearchResults.episodes.length})
+                        </h4>
+                        <div className="grid grid-cols-1 gap-2">
+                          {universalSearchResults.episodes.map(item => (
+                            <button
+                              key={`search-ep-${item.entry.id}-${item.seasonNum}-${item.episode.id}`}
+                              onClick={() => {
+                                handleSelectEntry(item.entry.id);
+                                setActiveTab('katalog');
+                                setSelectedEpisode({ seasonNum: item.seasonNum, episode: item.episode });
+                                setIsUniversalSearchOpen(false);
+                              }}
+                              className="w-full text-left p-2.5 rounded-xl bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-850/50 hover:border-zinc-800 transition flex items-center gap-3 group"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-yellow-400/10 border border-yellow-400/30 text-yellow-400 flex items-center justify-center font-mono font-bold text-xs shrink-0">
+                                S{item.seasonNum}E{item.episode.episodeNumber}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-zinc-100 group-hover:text-yellow-400 transition-colors truncate">
+                                  {item.episode.name}
+                                </p>
+                                <p className="text-[10px] text-zinc-500 font-mono mt-0.5 truncate">
+                                  {item.entry.name} • Sezona {item.seasonNum}, Epizoda {item.episode.episodeNumber}
+                                  {item.episode.releaseYear ? ` • Godina: ${item.episode.releaseYear}` : ''}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-xs font-mono font-bold text-yellow-400">★ {item.episode.rating.toFixed(1)}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Actors matching results */}
                     {universalSearchResults.actors.length > 0 && (
                       <div className="space-y-2">
@@ -3171,8 +3355,50 @@ export default function App() {
                       </div>
                     )}
 
+                    {/* Community User Profiles results */}
+                    {universalSearchResults.profiles.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-[10px] font-black uppercase text-yellow-400 tracking-wider flex items-center gap-1">
+                          <User size={10} /> Korisnici i Profili ({universalSearchResults.profiles.length})
+                        </h4>
+                        <div className="grid grid-cols-1 gap-2">
+                          {universalSearchResults.profiles.map(prof => (
+                            <button
+                              key={`search-prof-${prof.uid}`}
+                              onClick={() => {
+                                handleOpenSocialProfile(prof);
+                                setIsUniversalSearchOpen(false);
+                              }}
+                              className="w-full text-left p-2.5 rounded-xl bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-850/50 hover:border-zinc-800 transition flex items-center gap-3 group"
+                            >
+                              <img
+                                src={prof.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop'}
+                                alt=""
+                                className="w-8 h-8 rounded-full object-cover border border-zinc-700 shrink-0"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-zinc-100 group-hover:text-yellow-400 transition-colors truncate">
+                                  {prof.displayName}
+                                </p>
+                                <p className="text-[10px] text-zinc-500 truncate mt-0.5">
+                                  {prof.bio || prof.statusText || 'Član zajednice'}
+                                </p>
+                              </div>
+                              <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 font-bold shrink-0">
+                                Pogledaj profil
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* No matches */}
-                    {universalSearchResults.entries.length === 0 && universalSearchResults.actors.length === 0 && (
+                    {universalSearchResults.entries.length === 0 && 
+                     universalSearchResults.actors.length === 0 && 
+                     universalSearchResults.episodes.length === 0 && 
+                     universalSearchResults.profiles.length === 0 && (
                       <div className="text-center py-12 text-zinc-500 space-y-1">
                         <p className="text-sm font-semibold">Nema rezultata za "{universalQuery}"</p>
                         <p className="text-[10px] text-zinc-600">Pokušajte sa nekim drugim pojmom ili provjerite pravopis.</p>
@@ -3233,44 +3459,6 @@ export default function App() {
 
       {/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}
       <VedoPhysicsOverlay isActive={isVedoMode} />
-
-      {/* ADMIN PANEL MODAL */}
-      {isAdminPanelOpen && isAdmin && (
-        <AdminPanel
-          currentUser={userProfile}
-          onClose={() => setIsAdminPanelOpen(false)}
-        />
-      )}
-
-      {/* MIGRATION PROMPT - show on first login with local data */}
-      {showMigrationPrompt && (
-        <MigrationPrompt
-          entries={entries}
-          onProceed={() => {
-            setShowMigrationPrompt(false);
-            localStorage.setItem('migration-prompt-dismissed', 'true');
-          }}
-          onSkip={() => {
-            setShowMigrationPrompt(false);
-            localStorage.setItem('migration-prompt-dismissed', 'true');
-          }}
-        />
-      )}
-
-      {/* PENDING SUBMISSION TOAST */}
-      <AnimatePresence>
-        {showPendingToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-sky-500 text-white font-black text-xs uppercase px-5 py-3 rounded-full shadow-2xl shadow-sky-500/30 pointer-events-none"
-          >
-            <Check size={14} strokeWidth={3} />
-            <span>Promjena poslana adminu na odobrenje!</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}
     </div>
