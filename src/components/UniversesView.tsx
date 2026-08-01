@@ -412,9 +412,9 @@ export default function UniversesView({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelectUniverse(universe.id);
+                            setSelectedUniverseId(universe.id);
                           }}
-                          className="pt-1 text-[10px] font-bold text-yellow-400 hover:text-yellow-300 flex items-center gap-1"
+                          className="pt-1 text-[10px] font-bold text-yellow-400 hover:text-yellow-300 flex items-center gap-1 cursor-pointer"
                         >
                           Otvoriti Detalje i Grafik <ChevronRight size={12} />
                         </button>
@@ -774,13 +774,15 @@ export default function UniversesView({
                   </div>
                 )}
 
-                {/* Action button to open full grid for active universe */}
+                {/* Action button to scroll up to active universe details */}
                 <div className="pt-2">
                   <button
-                    onClick={() => onSelectUniverse(activeUniverse.id)}
+                    onClick={() => {
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                     className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
                   >
-                    <Layers size={14} /> Otvori Puni Grafik i Ocjene Univerzuma
+                    <Layers size={14} /> Prikaz Faza i Vremenske Linije Univerzuma
                   </button>
                 </div>
               </div>

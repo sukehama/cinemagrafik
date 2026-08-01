@@ -25,7 +25,7 @@ import { SkeletonGrid, SkeletonFilmCard, SkeletonHeroBanner } from './components
 
 // Firebase imports
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth, loginWithGoogle, logout, checkRedirectResult } from './firebase';
+import { auth, loginWithEmail, registerWithEmail, resetPasswordEmail, completePasswordReset, logout, checkRedirectResult } from './firebase';
 import { 
   syncFirestoreEntries, 
   saveEntryToFirestore, 
@@ -35,7 +35,9 @@ import {
   ContributionLog, 
   UserProfile,
   updateUserProfile,
-  getUserProfile
+  getUserProfile,
+  submitPendingChangeRequest,
+  syncAllLocalCatalogToFirestore
 } from './firebaseSync';
 
 import { 
@@ -44,6 +46,7 @@ import {
   Plus, 
   Search, 
   User, 
+  Key,
   Star, 
   RotateCcw, 
   Trash2, 
@@ -89,6 +92,12 @@ export default function App() {
     const now = Date.now();
     const updatedClicks = [...logoClicks, now].filter(t => now - t < 10000);
     if (updatedClicks.length >= 5) { // 6th click triggers toggle
+      if (!user) {
+        setSyncError('Morate biti prijavljeni da biste se borili protiv Vedo Dele!');
+        setShowSignInDropdown(true);
+        setLogoClicks([]);
+        return;
+      }
       setIsVedoMode(prev => !prev);
       setLogoClicks([]);
     } else {
@@ -194,6 +203,31 @@ export default function App() {
   const [isContributionsLoading, setIsContributionsLoading] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [showSignInDropdown, setShowSignInDropdown] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showSyncPrompt, setShowSyncPrompt] = useState(false);
+
+  // In-app password reset states
+  const [resetOobCode, setResetOobCode] = useState<string | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [isCompletingReset, setIsCompletingReset] = useState(false);
+  const [resetSuccessMsg, setResetSuccessMsg] = useState<string | null>(null);
+  const [resetErrorMsg, setResetErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('oobCode');
+      const mode = params.get('mode');
+      if (code && (mode === 'resetPassword' || !mode)) {
+        setResetOobCode(code);
+      }
+    }
+  }, []);
 
   // Social Profile Viewing States
   const [selectedSocialProfile, setSelectedSocialProfile] = useState<UserProfile | null>(null);
@@ -211,17 +245,29 @@ export default function App() {
     }
   };
 
-  const handleOpenSocialProfile = async (userId: string) => {
+  const handleOpenSocialProfile = async (target: string | Partial<UserProfile> & { uid: string }) => {
     setIsSocialContributionsLoading(true);
     setSelectedSocialProfile(null);
     setIsSocialProfileOpen(true);
+    const userId = typeof target === 'string' ? target : target.uid;
     try {
       const profileToView = await getUserProfile(userId);
-      setSelectedSocialProfile(profileToView);
       if (profileToView) {
-        // Fetch contribution logs for this selected user specifically
+        setSelectedSocialProfile(profileToView);
         const logs = await fetchContributions(userId);
         setSocialContributions(logs);
+      } else if (typeof target === 'object') {
+        setSelectedSocialProfile({
+          uid: target.uid,
+          displayName: target.displayName || 'Anoniman Korisnik',
+          photoURL: target.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
+          email: target.email || '',
+          createdAt: target.createdAt || new Date().toISOString(),
+          lastActive: target.lastActive || new Date().toISOString(),
+          contributionsCount: target.contributionsCount || 0,
+          statusText: 'Korisnik iz chata'
+        });
+        setSocialContributions([]);
       }
     } catch (err) {
       console.error("Failed to load community user profile:", err);
@@ -478,9 +524,10 @@ export default function App() {
 
   // Derive calculated active item
   const activeEntry = useMemo(() => {
-    const found = entries.find(e => e.id === activeId);
+    const catalogEntries = entries.filter(e => e.type !== 'universe');
+    const found = catalogEntries.find(e => e.id === activeId);
     if (found) return found;
-    if (entries.length > 0) return entries[0];
+    if (catalogEntries.length > 0) return catalogEntries[0];
     return null;
   }, [entries, activeId]);
 
@@ -706,6 +753,9 @@ export default function App() {
       });
     }
 
+    // Exclude 'universe' type entries from the main Katalog view (they are exclusively in the Universes tab)
+    list = list.filter(e => e.type !== 'universe');
+
     // Type filter
     if (filterType !== 'all') {
       list = list.filter(e => e.type === filterType);
@@ -748,7 +798,12 @@ export default function App() {
   // Add highly modular completely new entry
   const handleAddEntry = (newEntry: RatingEntry) => {
     setEntries(prev => [newEntry, ...prev]);
-    setActiveId(newEntry.id);
+    if (newEntry.type === 'universe') {
+      setActiveTab('univerzumi');
+    } else {
+      setActiveId(newEntry.id);
+      setActiveTab('katalog');
+    }
     setIsAddModalOpen(false);
   };
 
@@ -1179,10 +1234,15 @@ export default function App() {
 
   // Navigate from Actor bio catalogue references directly to another episode or movie
   const handleNavigateFromActorCatalog = (entryId: string, seasonNum?: number, episodeNum?: number) => {
+    const matchedEntry = entries.find(e => e.id === entryId);
+    if (matchedEntry?.type === 'universe') {
+      setActiveTab('univerzumi');
+      setSelectedEpisode(null);
+      return;
+    }
     setActiveId(entryId);
+    setActiveTab('katalog');
     if (seasonNum && episodeNum) {
-      // Find the entry that matches
-      const matchedEntry = entries.find(e => e.id === entryId);
       if (matchedEntry && matchedEntry.seasons) {
         const matchedSeason = matchedEntry.seasons.find(s => s.seasonNumber === seasonNum);
         const matchedEpisode = matchedSeason?.episodes.find(ep => ep.episodeNumber === episodeNum);
@@ -1401,14 +1461,15 @@ export default function App() {
         }} 
       />
 
-      {/* SUBTLE DARK NEUTRAL BOTTOM GRADIENT (Very slight grayish tone at the very bottom reaching upwards) */}
-      <div className="fixed inset-0 pointer-events-none z-0 bg-gradient-to-t from-zinc-800/15 via-zinc-950/80 to-zinc-950" />
+      {/* SUBTLE DARK NEUTRAL GRADIENTS FOR MAXIMUM TOP CONTRAST AND CINEMATIC LUXURY */}
+      <div className="fixed inset-0 pointer-events-none z-0 bg-gradient-to-b from-zinc-950 via-zinc-950/90 to-zinc-950" />
+      <div className="fixed inset-0 pointer-events-none z-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900/40 via-zinc-950/80 to-zinc-950" />
 
       {/* MAIN CONTAINER */}
       <div className="relative z-10 flex flex-col min-h-screen">
         
         {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
-        <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3 backdrop-blur-2xl bg-zinc-950/90 border-b border-zinc-800/80 shadow-2xl transition-all">
+        <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3.5 backdrop-blur-3xl bg-zinc-950/85 shadow-[0_10px_40px_rgba(0,0,0,0.8)] transition-all">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
             
             {/* TOP LEFT: BRAND LOGO & QUICK ENTRY SELECTOR */}
@@ -1445,24 +1506,23 @@ export default function App() {
                 </div>
               </button>
 
-              {/* QUICK ENTRY DROPDOWN MENU (Jump directly to any Movie/Show/Universe) */}
-              {entries.length > 0 && (
+              {/* QUICK ENTRY DROPDOWN MENU (Jump directly to any Movie/Show) */}
+              {entries.filter(e => e.type !== 'universe').length > 0 && (
                 <div className="relative hidden lg:block">
                   <select
                     value={activeEntry?.id || ''}
                     onChange={(e) => {
                       if (e.target.value) {
                         handleSelectEntry(e.target.value);
-                        setActiveTab('katalog');
                         setSelectedActorName(null);
                       }
                     }}
                     className="bg-zinc-900/90 text-zinc-200 text-xs font-bold py-1.5 px-3 pr-8 rounded-xl border border-zinc-800/90 hover:border-yellow-400/50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-yellow-400/40 truncate max-w-[210px] shadow-inner"
                   >
                     <option value="" disabled>-- Izaberi Naslov --</option>
-                    {entries.map(e => (
+                    {entries.filter(e => e.type !== 'universe').map(e => (
                       <option key={`quick-select-${e.id}`} value={e.id}>
-                        {e.type === 'universe' ? '🌌 ' : e.type === 'movie' ? '🎬 ' : '📺 '}
+                        {e.type === 'movie' ? '🎬 ' : '📺 '}
                         {e.name}
                       </option>
                     ))}
@@ -1742,11 +1802,14 @@ export default function App() {
                 // NOT LOGGED IN: Empty profile outline icon. Click shows dropdown or triggers login.
                 <div className="relative">
                   <button
-                    onClick={() => setShowSignInDropdown(!showSignInDropdown)}
+                    onClick={() => {
+                      setShowSignInDropdown(!showSignInDropdown);
+                      setSyncError(null);
+                    }}
                     className={`w-9 h-9 rounded-full bg-zinc-900 border flex items-center justify-center transition cursor-pointer ${
                       showSignInDropdown ? 'border-yellow-400 text-yellow-400' : 'border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
                     }`}
-                    title="Prijavite se s Google-om"
+                    title="Prijavite se E-mailom"
                   >
                     <User size={16} />
                   </button>
@@ -1758,67 +1821,150 @@ export default function App() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.95 }}
                         transition={{ duration: 0.15 }}
-                        className="absolute right-0 mt-2 w-72 bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-2xl z-50 text-left space-y-4"
+                        className="absolute right-0 mt-2 w-80 bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-2xl z-50 text-left space-y-3.5"
                       >
-                        <div className="space-y-1">
-                          <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Prijavite Se</h4>
-                          <p className="text-[10px] text-zinc-400 leading-relaxed">
-                            Prijavite se Google računom kako biste sinkronizirali svoj katalog i pregledali doprinose na svim uređajima!
-                          </p>
+                        <div className="flex items-center justify-between border-b border-zinc-850 pb-2">
+                          <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">
+                            {authMode === 'login' ? 'Prijava E-mailom' : 'Registracija Računa'}
+                          </h4>
+                          <span className="text-[10px] text-yellow-400 font-bold uppercase font-mono">
+                            {authMode === 'login' ? 'Prijava' : 'Novi Račun'}
+                          </span>
                         </div>
 
-                        {syncError === 'unauthorized-domain' ? (
-                          <div className="bg-amber-950/50 border border-amber-900/60 p-3.5 rounded-xl space-y-2.5 text-amber-200">
-                            <div className="flex gap-2 text-[11px] font-black uppercase tracking-wider text-amber-400 items-center">
-                              <AlertCircle size={14} className="shrink-0" />
-                              <span>Autorizacija Domene</span>
-                            </div>
-                            <p className="text-[10px] text-zinc-300 leading-relaxed">
-                              Kako bi Google prijava radila u Tauri aplikaciji i web pregledu, morate dodati ove domene u svoju Firebase konzolu:
-                            </p>
-                            <div className="bg-zinc-950 p-2 rounded-lg text-[9px] font-mono text-zinc-300 space-y-1 select-all border border-zinc-900 leading-normal">
-                              <div>• <span className="text-yellow-400">tauri.localhost</span></div>
-                              <div>• <span className="text-yellow-400">localhost</span></div>
-                              <div>• <span className="text-yellow-400">ais-dev-tvw4rthsz5lns4cdupfdzq-407597925605.europe-west1.run.app</span></div>
-                              <div>• <span className="text-yellow-400">ais-pre-tvw4rthsz5lns4cdupfdzq-407597925605.europe-west1.run.app</span></div>
-                            </div>
-                            <div className="text-[9px] text-zinc-400 leading-relaxed pt-1 border-t border-zinc-900">
-                              <strong>Koraci:</strong> Otvorite <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-yellow-400 underline hover:text-yellow-300 font-bold">Firebase Konzolu</a>, idite na <strong>Authentication &rarr; Settings &rarr; Authorized domains</strong> i dodajte ih na popis.
-                            </div>
-                          </div>
-                        ) : syncError ? (
+                        {syncError && (
                           <div className="bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl flex gap-2 text-[10px] text-red-400 font-bold leading-relaxed">
                             <AlertCircle size={14} className="shrink-0 mt-0.5" />
                             <span>{syncError}</span>
                           </div>
-                        ) : null}
+                        )}
 
-                        <button
-                          onClick={async () => {
+                        <form
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            if (!authEmail || !authPassword) return;
+                            setAuthSubmitting(true);
+                            setSyncError(null);
                             try {
-                              setSyncError(null);
-                              await loginWithGoogle();
+                              if (authMode === 'login') {
+                                await loginWithEmail(authEmail, authPassword);
+                              } else {
+                                await registerWithEmail(authEmail, authPassword, authName);
+                              }
                               setShowSignInDropdown(false);
                             } catch (err: any) {
-                              console.error("Google login error:", err);
-                              let friendlyMsg = err.message || 'Prijava nije uspjela';
-                              if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain'))) {
-                                friendlyMsg = 'unauthorized-domain';
+                              console.error("Auth error:", err);
+                              let msg = 'Prijava/Registracija nije uspjela.';
+                              if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+                                msg = 'Pogrešan e-mail ili lozinka.';
+                              } else if (err.code === 'auth/email-already-in-use') {
+                                msg = 'Ovaj e-mail je već u upotrebi.';
+                              } else if (err.code === 'auth/weak-password') {
+                                msg = 'Lozinka mora imati najmanje 6 znakova.';
+                              } else if (err.code === 'auth/too-many-requests') {
+                                msg = 'Previše neuspješnih pokušaja ili slanja emailova! Firebase je privremeno blokirao ovaj račun (auth/too-many-requests). Pričekajte 5 minuta.';
                               }
-                              setSyncError(friendlyMsg);
+                              setSyncError(msg);
+                            } finally {
+                              setAuthSubmitting(false);
                             }
                           }}
-                          className="w-full flex items-center justify-center gap-2.5 bg-white hover:bg-zinc-100 text-zinc-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer shadow-lg"
+                          className="space-y-2.5"
                         >
-                          {/* Google logo icon */}
-                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                          </svg>
-                          Google Prijava
-                        </button>
+                          {authMode === 'register' && (
+                            <div>
+                              <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Ime i Prezime / Pseudonim</label>
+                              <input
+                                type="text"
+                                value={authName}
+                                onChange={(e) => setAuthName(e.target.value)}
+                                placeholder="Vaše ime ili nadimak"
+                                required
+                                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white px-3 py-2 rounded-xl focus:outline-none focus:border-yellow-400"
+                              />
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">E-mail Adresa</label>
+                            <input
+                              type="email"
+                              value={authEmail}
+                              onChange={(e) => setAuthEmail(e.target.value)}
+                              placeholder="vassacount@domain.com"
+                              required
+                              className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white px-3 py-2 rounded-xl focus:outline-none focus:border-yellow-400 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[10px] text-zinc-400 font-bold uppercase">Lozinka</label>
+                              {authMode === 'login' && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (!authEmail.trim()) {
+                                      setSyncError('Unesite e-mail adresu u polje iznad za ponovno postavljanje lozinke.');
+                                      return;
+                                    }
+                                    try {
+                                      await resetPasswordEmail(authEmail.trim());
+                                      setToastMessage('Link za ponovno postavljanje lozinke je poslan na vaš email!');
+                                      setSyncError(null);
+                                      setTimeout(() => setToastMessage(null), 5000);
+                                    } catch (err: any) {
+                                      let msg = 'Greška pri slanju emaila za lozinku.';
+                                      if (err.code === 'auth/too-many-requests') {
+                                        msg = 'Firebase: Previše poslanih zahtjeva za ovaj email (too-many-requests). Sigurnosna blokada traje 5 minuta. Pričekajte trenutak pa pokušajte ponovno.';
+                                      } else if (err.message) {
+                                        msg += ' ' + err.message;
+                                      }
+                                      setSyncError(msg);
+                                    }
+                                  }}
+                                  className="text-[10px] text-yellow-400 hover:text-yellow-300 underline font-semibold transition cursor-pointer"
+                                >
+                                  Zaboravili ste lozinku?
+                                </button>
+                              )}
+                            </div>
+                            <input
+                              type="password"
+                              value={authPassword}
+                              onChange={(e) => setAuthPassword(e.target.value)}
+                              placeholder="••••••••"
+                              required
+                              className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white px-3 py-2 rounded-xl focus:outline-none focus:border-yellow-400 font-mono"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={authSubmitting}
+                            className="w-full flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-zinc-955 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer shadow-lg shadow-yellow-400/20 disabled:opacity-50 mt-1"
+                          >
+                            {authSubmitting ? <RefreshCw size={14} className="animate-spin" /> : null}
+                            {authMode === 'login' ? 'Prijavi Se' : 'Registruj Račun'}
+                          </button>
+                        </form>
+
+                        <div className="pt-2 border-t border-zinc-850 text-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthMode(authMode === 'login' ? 'register' : 'login');
+                              setSyncError(null);
+                            }}
+                            className="text-[11px] text-zinc-400 hover:text-yellow-400 transition cursor-pointer font-medium"
+                          >
+                            {authMode === 'login' ? (
+                              <span>Nemate račun? <strong className="text-yellow-400 underline">Registrujte se</strong></span>
+                            ) : (
+                              <span>Već imate račun? <strong className="text-yellow-400 underline">Prijavite se</strong></span>
+                            )}
+                          </button>
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -2045,7 +2191,6 @@ export default function App() {
                           }}
                           onClick={() => {
                             handleSelectEntry(e.id);
-                            setActiveTab('katalog');
                             setSelectedActorName(null);
                           }}
                           className="bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-yellow-400/50 rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 active:scale-98 group cursor-pointer shadow-xl flex flex-col h-full relative"
@@ -2158,17 +2303,13 @@ export default function App() {
               >
                 <UniversesView
                   entries={entries}
-                  onSelectUniverse={(univId) => {
-                    handleSelectEntry(univId);
-                    setActiveTab('katalog');
-                  }}
+                  onSelectUniverse={() => {}}
                   onAddNewUniverse={() => setIsAddModalOpen(true)}
                   onUpdateUniverse={(updatedUniverse) => {
                     setEntries(prev => prev.map(e => e.id === updatedUniverse.id ? updatedUniverse : e));
                   }}
                   onNavigateToEntry={(entryId) => {
                     handleSelectEntry(entryId);
-                    setActiveTab('katalog');
                   }}
                 />
               </motion.div>
@@ -2187,7 +2328,6 @@ export default function App() {
                   setSelectedActorName={setSelectedActorName}
                   onNavigateToEntry={(entryId, seasonNum, epNum) => {
                     handleNavigateFromActorCatalog(entryId, seasonNum, epNum);
-                    setActiveTab('katalog');
                   }}
                   onUpdateActorGlobalDetails={handleUpdateActorGlobalDetails}
                   onUpdateActorAppearanceRating={handleUpdateActorAppearanceRating}
@@ -3253,9 +3393,13 @@ export default function App() {
                             <button
                               key={`search-ent-${e.id}`}
                               onClick={() => {
-                                handleSelectEntry(e.id);
-                                setActiveTab('katalog');
-                                setSelectedActorName(null);
+                                if (e.type === 'universe') {
+                                  setActiveTab('univerzumi');
+                                } else {
+                                  handleSelectEntry(e.id);
+                                  setActiveTab('katalog');
+                                  setSelectedActorName(null);
+                                }
                                 setIsUniversalSearchOpen(false);
                               }}
                               className="w-full text-left p-2.5 rounded-xl bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-850/50 hover:border-zinc-800 transition flex items-center gap-3 group"
@@ -3440,6 +3584,7 @@ export default function App() {
         isLoadingContributions={isContributionsLoading}
         onUpdateProfile={handleProfileUpdate}
         onSelectUser={handleOpenSocialProfile}
+        onSyncAllToServer={() => syncAllLocalCatalogToFirestore(entries)}
       />
 
       {/* SOCIAL COMMUNITY PROFILE VIEW MODAL */}
@@ -3459,6 +3604,88 @@ export default function App() {
 
       {/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}
       <VedoPhysicsOverlay isActive={isVedoMode} />
+
+      {/* RESET PASSWORD MODAL */}
+      {resetOobCode && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-zinc-900 border border-yellow-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-yellow-400 flex items-center gap-2">
+              <Key size={20} /> Postavite novu lozinku
+            </h3>
+            <p className="text-xs text-zinc-300">
+              Unesite novu lozinku za vaš korisnički račun.
+            </p>
+            
+            {resetErrorMsg && (
+              <div className="p-3 bg-red-950/80 border border-red-500/40 rounded-xl text-xs text-red-300 font-medium">
+                {resetErrorMsg}
+              </div>
+            )}
+            
+            {resetSuccessMsg ? (
+              <div className="p-4 bg-emerald-950/80 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 font-bold space-y-3">
+                <p>{resetSuccessMsg}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetOobCode(null);
+                    setShowSignInDropdown(true);
+                  }}
+                  className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Prijavi se s novom lozinkom
+                </button>
+              </div>
+            ) : (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newPasswordInput || newPasswordInput.length < 6) {
+                    setResetErrorMsg('Lozinka mora imati najmanje 6 znakova.');
+                    return;
+                  }
+                  setIsCompletingReset(true);
+                  setResetErrorMsg(null);
+                  try {
+                    await completePasswordReset(resetOobCode, newPasswordInput);
+                    setResetSuccessMsg('✓ Lozinka je uspješno promijenjena! Sada se možete prijaviti.');
+                  } catch (err: any) {
+                    setResetErrorMsg('Greška pri promjeni lozinke: ' + (err.message || 'Kod za ponovno postavljanje je istekao ili je već iskorišten. Upišite email i zatražite novi kod.'));
+                  } finally {
+                    setIsCompletingReset(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <input
+                  type="password"
+                  placeholder="Nova lozinka (min. 6 znakova)"
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-xs focus:outline-none focus:border-yellow-400"
+                  required
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetOobCode(null)}
+                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs cursor-pointer"
+                  >
+                    Odustani
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCompletingReset}
+                    className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-amber-400 hover:from-yellow-400 hover:to-amber-300 text-black font-extrabold rounded-xl text-xs uppercase tracking-wider disabled:opacity-50 cursor-pointer transition"
+                  >
+                    {isCompletingReset ? 'Spremanje...' : 'Spremi novu lozinku'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}
     </div>

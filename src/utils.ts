@@ -137,17 +137,25 @@ export function calculateAverageRating(entry: RatingEntry): number {
 
 export function getYoutubeEmbedUrl(url: string | undefined): string | null {
   if (!url) return null;
+  const cleanUrl = url.trim();
   
-  // Handled embed format
-  if (url.includes('youtube.com/embed/')) {
-    return url;
+  // Handled embed format already
+  if (cleanUrl.includes('youtube.com/embed/')) {
+    const embedId = cleanUrl.split('youtube.com/embed/')[1]?.split('?')[0]?.split('&')[0];
+    return embedId ? `https://www.youtube.com/embed/${embedId}` : cleanUrl;
+  }
+
+  // Convert YouTube Shorts
+  if (cleanUrl.includes('youtube.com/shorts/')) {
+    const shortsId = cleanUrl.split('youtube.com/shorts/')[1]?.split('?')[0]?.split('&')[0];
+    if (shortsId) return `https://www.youtube.com/embed/${shortsId}`;
   }
   
-  // Convert watch standard URL
+  // Convert watch standard URL or youtu.be
   try {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    if (match && match[2].length === 11) {
+    const match = cleanUrl.match(regExp);
+    if (match && match[2] && match[2].length === 11) {
       return `https://www.youtube.com/embed/${match[2]}`;
     }
   } catch (e) {

@@ -76,6 +76,8 @@ export interface ContributionLog {
   timestamp: string;
 }
 
+import { TrophyItem, PendingChangeRequest } from './types';
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -89,12 +91,112 @@ export interface UserProfile {
   profileGradientStyle?: string; // 'classic' | 'cyberpunk' | 'sunset' | 'emerald' | 'cosmic' | 'gold'
   statusText?: string;
   isOnline?: boolean;
+  isModerator?: boolean;
+  isAdmin?: boolean;
+  trophies?: TrophyItem[];
 }
+
+/**
+ * Fetch all registered user profiles (for Admin panel search)
+ */
+export async function fetchAllUserProfiles(): Promise<UserProfile[]> {
+  try {
+    const usersCol = collection(db, 'users');
+    const snap = await getDocs(usersCol);
+    const users: UserProfile[] = [];
+    snap.forEach(docSnap => {
+      users.push(docSnap.data() as UserProfile);
+    });
+    return users;
+  } catch (err) {
+    console.error('Error fetching user profiles:', err);
+    return [];
+  }
+}
+
+/**
+ * Set user moderator status (Admin only)
+ */
+export async function setUserModeratorStatus(targetUid: string, isModerator: boolean): Promise<void> {
+  try {
+    const userRef = doc(db, 'users', targetUid);
+    await updateDoc(userRef, { isModerator });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `users/${targetUid}`);
+  }
+}
+
+/**
+ * Submit pending change request (for regular users)
+ */
+export async function submitPendingChangeRequest(
+  userId: string,
+  userName: string,
+  userEmail: string,
+  type: PendingChangeRequest['type'],
+  details: string,
+  entryId?: string,
+  entryData?: Partial<RatingEntry>
+): Promise<void> {
+  try {
+    const requestsCol = collection(db, 'pending_requests');
+    await addDoc(requestsCol, {
+      userId,
+      userName,
+      userEmail,
+      type,
+      details,
+      entryId: entryId || null,
+      entryData: entryData ? sanitizeForFirestore(entryData) : null,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, 'pending_requests');
+  }
+}
+
+/**
+ * Fetch pending change requests (for Admin / Moderators)
+ */
+export async function fetchPendingChangeRequests(): Promise<PendingChangeRequest[]> {
+  try {
+    const requestsCol = collection(db, 'pending_requests');
+    const q = query(requestsCol, where('status', '==', 'pending'));
+    const snap = await getDocs(q);
+    const list: PendingChangeRequest[] = [];
+    snap.forEach(docSnap => {
+      list.push({ id: docSnap.id, ...docSnap.data() } as PendingChangeRequest);
+    });
+    return list;
+  } catch (err) {
+    console.error('Error fetching pending requests:', err);
+    return [];
+  }
+}
+
+/**
+ * Update request status (Approve / Reject)
+ */
+export async function updateChangeRequestStatus(requestId: string, status: 'approved' | 'rejected'): Promise<void> {
+  try {
+    const ref = doc(db, 'pending_requests', requestId);
+    await updateDoc(ref, { status });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `pending_requests/${requestId}`);
+  }
+}
+
 
 /**
  * Syncs entries from Firestore in real-time.
  * If Firestore is empty and localEntries has data, migrates localEntries to Firestore.
  */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === undefined || data === null) return data;
+  return JSON.parse(JSON.stringify(data));
+}
+
 export function syncFirestoreEntries(
   localEntries: RatingEntry[],
   onSync: (entries: RatingEntry[]) => void,
@@ -111,12 +213,16 @@ export function syncFirestoreEntries(
         // Firestore is empty. If we have local entries, migrate them!
         if (localEntries.length > 0) {
           console.log(`[Firebase Sync] Firestore is empty. Migrating ${localEntries.length} local entries...`);
-          const batch = writeBatch(db);
-          localEntries.forEach((entry) => {
-            const docRef = doc(db, 'entries', entry.id);
-            batch.set(docRef, entry);
-          });
-          await batch.commit();
+          const CHUNK_SIZE = 400;
+          for (let i = 0; i < localEntries.length; i += CHUNK_SIZE) {
+            const chunk = localEntries.slice(i, i + CHUNK_SIZE);
+            const batch = writeBatch(db);
+            chunk.forEach((entry) => {
+              const docRef = doc(db, 'entries', entry.id);
+              batch.set(docRef, sanitizeForFirestore(entry));
+            });
+            await batch.commit();
+          }
           console.log('[Firebase Sync] Migration completed successfully.');
           onSync(localEntries);
         } else {
@@ -144,6 +250,27 @@ export function syncFirestoreEntries(
 }
 
 /**
+ * Master Admin function: Pushes all local catalog entries to Firestore as universal truth.
+ */
+export async function syncAllLocalCatalogToFirestore(entries: RatingEntry[]): Promise<void> {
+  try {
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+      const chunk = entries.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach((entry) => {
+        const docRef = doc(db, 'entries', entry.id);
+        batch.set(docRef, sanitizeForFirestore(entry));
+      });
+      await batch.commit();
+    }
+    console.log(`[Firebase Master Sync] Successfully uploaded ${entries.length} entries to Firestore.`);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'entries_batch_sync');
+  }
+}
+
+/**
  * Saves or updates a rating entry in Firestore.
  * Optionally logs a contribution if user details are provided.
  */
@@ -156,7 +283,7 @@ export async function saveEntryToFirestore(
 ): Promise<void> {
   const docRef = doc(db, 'entries', entry.id);
   try {
-    await setDoc(docRef, entry);
+    await setDoc(docRef, sanitizeForFirestore(entry));
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `entries/${entry.id}`);
   }
@@ -272,22 +399,29 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
 
   const timestamp = new Date().toISOString();
 
+  const isMasterAdmin = user.email?.toLowerCase() === 'rogerstold@gmail.com';
+
   if (userSnap && userSnap.exists()) {
     const existingData = userSnap.data() as UserProfile;
+    const updatedProfile: UserProfile = {
+      ...existingData,
+      isAdmin: isMasterAdmin ? true : existingData.isAdmin,
+      isModerator: isMasterAdmin ? true : existingData.isModerator,
+      lastActive: timestamp,
+      isOnline: true,
+    };
     // Update last active and set online - handle failures gracefully when offline
     try {
       await updateDoc(userRef, {
+        isAdmin: updatedProfile.isAdmin,
+        isModerator: updatedProfile.isModerator,
         lastActive: timestamp,
         isOnline: true,
       });
     } catch (err) {
       console.warn('[Firebase Sync] Failed to update user online status in Firestore (offline):', err);
     }
-    return {
-      ...existingData,
-      lastActive: timestamp,
-      isOnline: true,
-    };
+    return updatedProfile;
   } else {
     // Create new profile with customizable default fields
     const newProfile: UserProfile = {
@@ -302,7 +436,10 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
       profileGradientStyle: 'classic',
       statusText: 'Aktivan u katalogu',
       bannerUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=600&h=200&q=80',
-      isOnline: true
+      isOnline: true,
+      isAdmin: isMasterAdmin,
+      isModerator: isMasterAdmin,
+      trophies: []
     };
     try {
       await setDoc(userRef, newProfile);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
@@ -22,9 +22,20 @@ import {
   Save,
   Eye,
   Camera,
-  Activity
+  Activity,
+  CheckCircle,
+  XCircle,
+  Search
 } from 'lucide-react';
-import { UserProfile, ContributionLog } from '../firebaseSync';
+import { 
+  UserProfile, 
+  ContributionLog, 
+  fetchAllUserProfiles, 
+  setUserModeratorStatus, 
+  fetchPendingChangeRequests, 
+  updateChangeRequestStatus 
+} from '../firebaseSync';
+import { PendingChangeRequest } from '../types';
 
 interface UserProfileModalProps {
   user: any;
@@ -37,6 +48,7 @@ interface UserProfileModalProps {
   isReadOnly?: boolean;
   onUpdateProfile?: (updatedData: Partial<UserProfile>) => Promise<void>;
   onSelectUser?: (userId: string) => void;
+  onSyncAllToServer?: () => Promise<void>;
 }
 
 const AVATAR_PRESETS = [
@@ -67,7 +79,8 @@ export default function UserProfileModal({
   isLoadingContributions = false,
   isReadOnly = false,
   onUpdateProfile,
-  onSelectUser
+  onSelectUser,
+  onSyncAllToServer
 }: UserProfileModalProps) {
   
   const [isEditing, setIsEditing] = React.useState(false);
@@ -79,6 +92,10 @@ export default function UserProfileModal({
   const [editedBannerUrl, setEditedBannerUrl] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
+
+  // Admin sync status
+  const [isSyncingMaster, setIsSyncingMaster] = React.useState(false);
+  const [syncMasterMsg, setSyncMasterMsg] = React.useState<string | null>(null);
 
   // Synchronize internal state on profile change
   React.useEffect(() => {
@@ -95,7 +112,51 @@ export default function UserProfileModal({
   if (!isOpen || !profile) return null;
 
   // Determine administrator privilege status
-  const isAdmin = profile.email === 'rogerstold@gmail.com';
+  const isAdmin = profile.email === 'bilkufarimulhik006@gmail.com' || profile.isAdmin === true;
+
+  // Admin panel state
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [pendingRequests, setPendingRequests] = useState<PendingChangeRequest[]>([]);
+  const [isLoadingAdmin, setIsLoadingAdmin] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && isAdmin) {
+      const loadAdminData = async () => {
+        setIsLoadingAdmin(true);
+        try {
+          const users = await fetchAllUserProfiles();
+          setAllUsers(users);
+          const reqs = await fetchPendingChangeRequests();
+          setPendingRequests(reqs);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setIsLoadingAdmin(false);
+        }
+      };
+      loadAdminData();
+    }
+  }, [isOpen, isAdmin]);
+
+  const handleToggleModerator = async (targetUid: string, currentStatus: boolean | undefined) => {
+    const nextStatus = !currentStatus;
+    try {
+      await setUserModeratorStatus(targetUid, nextStatus);
+      setAllUsers(prev => prev.map(u => u.uid === targetUid ? { ...u, isModerator: nextStatus } : u));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleResolveRequest = async (requestId: string, status: 'approved' | 'rejected') => {
+    try {
+      await updateChangeRequestStatus(requestId, status);
+      setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const getGradientClass = (styleId?: string) => {
     const found = GRADIENT_PRESETS.find(p => p.id === styleId);
@@ -480,6 +541,182 @@ export default function UserProfileModal({
                     </div>
                   </div>
                 </div>
+
+                {/* TROFEJI SECTION (Unlocked Boss Trophies & Achievements) */}
+                <div className="space-y-3 bg-zinc-950/80 p-4 rounded-2xl border border-yellow-400/20">
+                  <h4 className="text-xs font-black uppercase text-yellow-400 tracking-wider flex items-center gap-2">
+                    <Award size={16} className="text-yellow-400" />
+                    Trofeji i Dostignuća
+                  </h4>
+
+                  {(profile.trophies && profile.trophies.length > 0) || localStorage.getItem('vedo_trophy_unlocked') === 'true' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="flex items-center gap-3 bg-gradient-to-r from-yellow-500/10 to-amber-500/5 p-3 rounded-xl border border-yellow-500/30">
+                        <div className="w-10 h-10 rounded-full bg-yellow-400 text-zinc-955 flex items-center justify-center font-black shadow-[0_0_15px_rgba(250,204,21,0.5)] shrink-0">
+                          <Crown size={20} />
+                        </div>
+                        <div>
+                          <h5 className="text-xs font-black text-yellow-300 uppercase tracking-wide">Vedo Dela Slayer 🏆</h5>
+                          <p className="text-[10px] text-zinc-400 font-bold">Pobijeđen Vedo Dela Boss u mini-igri!</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-500 font-mono italic">
+                      Još nemate otključanih trofeja. Pobijedite Vedo Dela Boss-a da otključate prvi trofej!
+                    </p>
+                  )}
+                </div>
+
+                {/* ADMIN PANEL SECTION (Exclusively for Master Admin rogerstold@gmail.com) */}
+                {isAdmin && (
+                  <div className="space-y-4 bg-gradient-to-br from-amber-500/10 via-zinc-950 to-zinc-950 p-5 rounded-2xl border border-amber-500/40 shadow-2xl">
+                    <div className="flex items-center justify-between border-b border-amber-500/20 pb-2.5">
+                      <h4 className="text-xs font-black uppercase text-amber-400 tracking-wider flex items-center gap-2">
+                        <Crown size={18} className="text-amber-400 animate-pulse" />
+                        Admin Kontrolni Panel (rogerstold@gmail.com)
+                      </h4>
+                      <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                        Vlasnik Baze
+                      </span>
+                    </div>
+
+                    {/* Master Catalog Server Sync Option */}
+                    {onSyncAllToServer && (
+                      <div className="pt-3 border-b border-amber-500/20 pb-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-[11px] font-black uppercase text-amber-300 tracking-wider flex items-center gap-1.5">
+                            <Activity size={13} className="text-amber-400" />
+                            Glavna Sinhronizacija Baze sa Serverom
+                          </h5>
+                          <span className="text-[9px] font-mono text-zinc-400">Master Sync</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-400 leading-relaxed">
+                          Pritisnite ovo dugme da pošaljete sav lokalni katalog na centralni Firestore server. Od tog trenutka svi drugi korisnici u Bosni i Hercegovini i svijetu vide kompletan sadržaj s vašeg kompjutera!
+                        </p>
+
+                        {syncMasterMsg && (
+                          <div className="p-2 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-[10px] text-emerald-300 font-bold">
+                            {syncMasterMsg}
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={isSyncingMaster}
+                          onClick={async () => {
+                            setIsSyncingMaster(true);
+                            setSyncMasterMsg(null);
+                            try {
+                              await onSyncAllToServer();
+                              setSyncMasterMsg('✓ Čitav katalog uspješno sinhronizovan na server! Svi korisnici sada imaju vašu najnoviju bazu.');
+                            } catch (e: any) {
+                              setSyncMasterMsg('Greška pri sinhronizaciji: ' + (e.message || 'Nepoznata greška'));
+                            } finally {
+                              setIsSyncingMaster(false);
+                            }
+                          }}
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-zinc-955 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSyncingMaster ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                          {isSyncingMaster ? 'Sinhronizujem...' : '🚀 Sinhronizuj Sve sa Serverom'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Pending Requests Review */}
+                    <div className="space-y-2.5">
+                      <h5 className="text-[11px] font-black uppercase text-zinc-300 tracking-wider flex items-center gap-1.5">
+                        <Clock size={13} className="text-yellow-400" />
+                        Zahtjevi za Izmjene ({pendingRequests.length})
+                      </h5>
+                      {pendingRequests.length === 0 ? (
+                        <p className="text-xs text-zinc-500 italic bg-zinc-950/60 p-3 rounded-xl border border-zinc-900">
+                          Nema trenutnih zahtjeva na čekanju.
+                        </p>
+                      ) : (
+                        <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                          {pendingRequests.map(req => (
+                            <div key={req.id} className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center justify-between gap-3 text-xs">
+                              <div>
+                                <div className="font-extrabold text-zinc-200">
+                                  {req.userName} <span className="text-zinc-500 font-normal">({req.userEmail})</span>
+                                </div>
+                                <div className="text-[10px] text-yellow-400 font-bold mt-0.5">
+                                  {req.details}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleResolveRequest(req.id, 'approved')}
+                                  className="bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-zinc-955 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition flex items-center gap-1"
+                                >
+                                  <CheckCircle size={12} /> Odobri
+                                </button>
+                                <button
+                                  onClick={() => handleResolveRequest(req.id, 'rejected')}
+                                  className="bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition flex items-center gap-1"
+                                >
+                                  <XCircle size={12} /> Odbij
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Manage Users & Moderator Privileges */}
+                    <div className="space-y-2.5 pt-3 border-t border-amber-500/20">
+                      <h5 className="text-[11px] font-black uppercase text-zinc-300 tracking-wider flex items-center gap-1.5">
+                        <Shield size={13} className="text-amber-400" />
+                        Upravljanje Korisnicima & Moderatorima
+                      </h5>
+                      
+                      <div className="relative">
+                        <Search size={13} className="absolute left-3 top-2.5 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Pretraži registrovane korisnike..."
+                          value={userSearchQuery}
+                          onChange={(e) => setUserSearchQuery(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-850 text-xs text-zinc-200 pl-8 pr-3 py-1.5 rounded-xl focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                        {allUsers
+                          .filter(u => 
+                            !userSearchQuery || 
+                            u.displayName?.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
+                            u.email?.toLowerCase().includes(userSearchQuery.toLowerCase())
+                          )
+                          .map(u => (
+                            <div key={u.uid} className="bg-zinc-950/80 p-2.5 rounded-xl border border-zinc-900 flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-2.5">
+                                <img src={u.photoURL} alt={u.displayName} className="w-7 h-7 rounded-full object-cover border border-zinc-800" />
+                                <div>
+                                  <div className="font-extrabold text-zinc-200 text-xs">{u.displayName}</div>
+                                  <div className="text-[10px] text-zinc-500 font-mono">{u.email}</div>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleToggleModerator(u.uid, u.isModerator)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition ${
+                                  u.isModerator
+                                    ? 'bg-amber-400 text-zinc-955 shadow-md shadow-amber-400/20'
+                                    : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                                }`}
+                              >
+                                {u.isModerator ? 'Moderator ✓' : '+ Dodaj Moderatora'}
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
 
                 {/* Contribution list inside Modal (only shown if we are viewing the modal, disabled if no logs passed) */}
                 {recentContributions.length > 0 && (

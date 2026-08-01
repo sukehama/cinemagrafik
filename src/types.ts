@@ -46,6 +46,7 @@ export interface Episode {
   // Custom hyperlink fields
   linkText?: string;
   linkTargetId?: string;
+  linkedEntries?: { entryId: string; seasonNum?: number; episodeNum?: number; customTitle?: string }[];
 }
 
 export interface Season {
@@ -86,3 +87,24 @@ export interface RatingEntry {
 
 export type SortKey = 'name' | 'rating' | 'year';
 export type SortOrder = 'asc' | 'desc';
+
+export interface TrophyItem {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlockedAt: string;
+}
+
+export interface PendingChangeRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  type: 'add_entry' | 'edit_entry' | 'delete_entry' | 'rating_update';
+  entryId?: string;
+  entryData?: Partial<RatingEntry>;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  details: string;
+}

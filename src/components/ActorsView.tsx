@@ -1,7 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Actor, RatingEntry } from '../types';
-import { Search, User, Edit3, Save, Calendar, ExternalLink, Star, Award, Heart, Info, ArrowLeft, Trash } from 'lucide-react';
+import { Search, User, Edit3, Save, Calendar, ExternalLink, Star, Award, Heart, Info, ArrowLeft, Trash, FolderPlus, Folder, Plus, X, Layers } from 'lucide-react';
+
+interface ActorFolder {
+  id: string;
+  name: string;
+  actorNames: string[];
+}
 
 interface ActorsViewProps {
   entries: RatingEntry[];
@@ -35,6 +41,27 @@ export default function ActorsView({
 }: ActorsViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Folders state
+  const [folders, setFolders] = useState<ActorFolder[]>(() => {
+    try {
+      const saved = localStorage.getItem('actor_folders_v1');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return [
+      { id: 'f-favs', name: '⭐ Favoriti', actorNames: [] },
+      { id: 'f-lead', name: '🎬 Glavni Likovi', actorNames: [] }
+    ];
+  });
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+
+  useEffect(() => {
+    localStorage.setItem('actor_folders_v1', JSON.stringify(folders));
+  }, [folders]);
+
   // Actor edit form states
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
@@ -51,6 +78,43 @@ export default function ActorsView({
       a => a.actor.name.trim().toLowerCase() === selectedActorName.trim().toLowerCase()
     );
   }, [allActorsWithAppearances, selectedActorName]);
+
+  // Create folder helper
+  const handleCreateFolder = () => {
+    const trimmed = newFolderName.trim();
+    if (!trimmed) return;
+    const newFolder: ActorFolder = {
+      id: `f-${Date.now()}`,
+      name: trimmed,
+      actorNames: []
+    };
+    setFolders(prev => [...prev, newFolder]);
+    setNewFolderName('');
+    setIsCreatingFolder(false);
+    setSelectedFolderId(newFolder.id);
+  };
+
+  const handleDeleteFolder = (folderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFolders(prev => prev.filter(f => f.id !== folderId));
+    if (selectedFolderId === folderId) {
+      setSelectedFolderId('all');
+    }
+  };
+
+  const toggleActorInFolder = (folderId: string, actorName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFolders(prev => prev.map(f => {
+      if (f.id === folderId) {
+        const exists = f.actorNames.some(n => n.toLowerCase() === actorName.toLowerCase());
+        const updated = exists 
+          ? f.actorNames.filter(n => n.toLowerCase() !== actorName.toLowerCase())
+          : [...f.actorNames, actorName];
+        return { ...f, actorNames: updated };
+      }
+      return f;
+    }));
+  };
 
   // Handle opening of edit mode
   const startEditing = () => {
@@ -85,16 +149,27 @@ export default function ActorsView({
     setIsEditing(false);
   };
 
-  // Filter list of all actors by search query
+  // Filter list of all actors by search query and folder
   const filteredActors = useMemo(() => {
+    let list = allActorsWithAppearances;
+
+    if (selectedFolderId !== 'all') {
+      const activeFolder = folders.find(f => f.id === selectedFolderId);
+      if (activeFolder) {
+        list = list.filter(a => 
+          activeFolder.actorNames.some(n => n.toLowerCase() === a.actor.name.toLowerCase())
+        );
+      }
+    }
+
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return allActorsWithAppearances;
-    return allActorsWithAppearances.filter(a => 
+    if (!q) return list;
+    return list.filter(a => 
       a.actor.name.toLowerCase().includes(q) || 
       (a.actor.characterName && a.actor.characterName.toLowerCase().includes(q)) ||
       a.appearances.some(app => app.entryName.toLowerCase().includes(q))
     );
-  }, [allActorsWithAppearances, searchQuery]);
+  }, [allActorsWithAppearances, searchQuery, selectedFolderId, folders]);
 
   return (
     <div className="space-y-6" id="actors-database-panel">
@@ -116,7 +191,7 @@ export default function ActorsView({
                   <Award className="text-yellow-400 w-5 h-5" /> Baza Glumaca
                 </h2>
                 <p className="text-xs text-zinc-500 mt-1">
-                  Upravljajte i ocjenjujte uloge svih glumačkih ekipa u vašem katalogu
+                  Upravljajte, grupišite u foldere i ocjenjujte glumce u vašem katalogu
                 </p>
               </div>
 
@@ -130,9 +205,92 @@ export default function ActorsView({
                   placeholder="Pretraži glumce, uloge, djela..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 rounded-lg text-xs bg-zinc-900 border border-zinc-800 text-slate-200 placeholder-zinc-500 focus:outline-none focus:border-yellow-500 transition-all"
+                  className="w-full pl-9 pr-4 py-2 rounded-xl text-xs bg-zinc-950 border border-zinc-800 text-slate-200 placeholder-zinc-500 focus:outline-none focus:border-yellow-500 transition-all"
                 />
               </div>
+            </div>
+
+            {/* FOLDERS / GROUPS NAVIGATION BAR */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+              <button
+                onClick={() => setSelectedFolderId('all')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                  selectedFolderId === 'all'
+                    ? 'bg-yellow-400 text-zinc-955 shadow-md shadow-yellow-400/20 font-black'
+                    : 'bg-zinc-900/80 text-zinc-400 hover:text-white border border-zinc-800'
+                }`}
+              >
+                <Layers size={14} /> Svi Glumci ({allActorsWithAppearances.length})
+              </button>
+
+              {folders.map(f => {
+                const count = f.actorNames.length;
+                const isSel = selectedFolderId === f.id;
+                return (
+                  <div
+                    key={f.id}
+                    onClick={() => setSelectedFolderId(f.id)}
+                    className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer border ${
+                      isSel
+                        ? 'bg-zinc-800 text-yellow-400 border-yellow-400/50 shadow-md'
+                        : 'bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border-zinc-800/80 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <Folder size={14} className={isSel ? 'text-yellow-400 fill-yellow-400/20' : 'text-zinc-500'} />
+                    <span>{f.name}</span>
+                    <span className="text-[10px] font-mono opacity-70 bg-zinc-950 px-1.5 py-0.2 rounded-full border border-zinc-800">
+                      {count}
+                    </span>
+
+                    {/* Delete folder button */}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteFolder(f.id, e)}
+                      className="ml-1 opacity-0 group-hover:opacity-100 hover:text-red-400 transition"
+                      title="Obriši folder"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* Add folder button / inline form */}
+              {isCreatingFolder ? (
+                <div className="flex items-center gap-1.5 bg-zinc-900 border border-yellow-400/50 rounded-xl px-2 py-1 shrink-0">
+                  <input
+                    type="text"
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    placeholder="Naziv foldera..."
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCreateFolder();
+                      if (e.key === 'Escape') setIsCreatingFolder(false);
+                    }}
+                    className="bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 px-2 py-1 rounded-lg focus:outline-none focus:border-yellow-400 w-32 font-bold"
+                  />
+                  <button
+                    onClick={handleCreateFolder}
+                    className="bg-yellow-400 text-zinc-955 p-1 rounded-lg font-bold hover:bg-yellow-300"
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <button
+                    onClick={() => setIsCreatingFolder(false)}
+                    className="text-zinc-500 hover:text-zinc-300 p-1"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsCreatingFolder(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-yellow-400/80 hover:text-yellow-400 bg-yellow-400/5 hover:bg-yellow-400/10 border border-yellow-400/20 transition shrink-0 cursor-pointer"
+                >
+                  <FolderPlus size={14} /> Novi Folder
+                </button>
+              )}
             </div>
 
             {/* Grid */}
@@ -154,54 +312,90 @@ export default function ActorsView({
                     : 0;
 
                   return (
-                    <button
+                    <div
                       key={`actor-card-${actor.name}`}
                       onClick={() => setSelectedActorName(actor.name)}
-                      className="group bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 hover:border-zinc-800 rounded-2xl p-3.5 text-center flex flex-col items-center transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                      className="group relative bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-850 hover:border-yellow-400/40 rounded-3xl p-4 text-center flex flex-col items-center transition-all duration-300 transform hover:-translate-y-1.5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)] cursor-pointer"
                     >
-                      {/* Avatar picture */}
-                      <div className="w-16 h-16 rounded-full overflow-hidden bg-zinc-950 border-2 border-zinc-800 group-hover:border-yellow-400 transition-all shadow-md relative shrink-0">
-                        {actor.photoUrl ? (
-                          <img
-                            src={actor.photoUrl}
-                            alt={actor.name}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-650 bg-zinc-950">
-                            <User className="w-6 h-6" />
+                      {/* Folder badges quick dropdown / toggle on top right */}
+                      {folders.length > 0 && (
+                        <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="relative group/foldermenu">
+                            <button
+                              type="button"
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-6 h-6 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-yellow-400 flex items-center justify-center shadow-lg"
+                              title="Dodaj u folder"
+                            >
+                              <FolderPlus size={12} />
+                            </button>
+                            <div className="absolute right-0 top-7 hidden group-hover/foldermenu:block bg-zinc-950 border border-zinc-800 rounded-xl p-2 shadow-2xl z-50 w-44 text-left space-y-1">
+                              <p className="text-[9px] font-black uppercase text-zinc-500 px-1 mb-1">Dodaj u folder:</p>
+                              {folders.map(f => {
+                                const inF = f.actorNames.some(n => n.toLowerCase() === actor.name.toLowerCase());
+                                return (
+                                  <button
+                                    key={f.id}
+                                    onClick={(e) => toggleActorInFolder(f.id, actor.name, e)}
+                                    className={`w-full text-left px-2 py-1 rounded-lg text-[11px] font-bold flex items-center justify-between ${
+                                      inF ? 'bg-yellow-400/10 text-yellow-400' : 'text-zinc-300 hover:bg-zinc-900'
+                                    }`}
+                                  >
+                                    <span className="truncate">{f.name}</span>
+                                    {inF && <span className="text-[10px]">✓</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                        )}
+                        </div>
+                      )}
+
+                      {/* Smooth Avatar Circle with Glowing Ring */}
+                      <div className="relative p-1 rounded-full bg-gradient-to-b from-zinc-700/40 to-zinc-900 group-hover:from-yellow-400/80 group-hover:to-yellow-600/60 transition-all duration-300 shadow-xl">
+                        <div className="w-20 h-20 rounded-full overflow-hidden bg-zinc-950 relative shrink-0 border border-zinc-900">
+                          {actor.photoUrl ? (
+                            <img
+                              src={actor.photoUrl}
+                              alt={actor.name}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-zinc-600 bg-zinc-950">
+                              <User className="w-8 h-8" />
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Info block */}
-                      <div className="mt-3 w-full">
-                        <h4 className="font-black text-xs text-zinc-150 tracking-tight truncate w-full group-hover:text-white transition">
+                      <div className="mt-3.5 w-full">
+                        <h4 className="font-black text-xs text-zinc-100 tracking-tight truncate w-full group-hover:text-yellow-400 transition-colors">
                           {actor.name}
                         </h4>
                         
                         {actor.characterName && (
-                          <p className="text-[10px] text-zinc-500 truncate italic mt-0.5">
-                            u ulozi: {actor.characterName}
+                          <p className="text-[10px] text-zinc-400 truncate italic mt-0.5 font-medium">
+                            {actor.characterName}
                           </p>
                         )}
                         
                         {/* Summary details */}
-                        <div className="flex items-center justify-center gap-2 mt-2 pt-2 border-t border-zinc-850/60">
-                          <span className="text-[9px] font-mono text-zinc-500 font-bold bg-zinc-950/60 px-1.5 py-0.5 rounded border border-zinc-800">
+                        <div className="flex items-center justify-center gap-2 mt-2.5 pt-2 border-t border-zinc-850/80">
+                          <span className="text-[9px] font-mono text-zinc-400 font-bold bg-zinc-900 px-2 py-0.5 rounded-full border border-zinc-800">
                             {appearances.length} {appearances.length === 1 ? 'Uloga' : appearances.length < 5 ? 'Uloge' : 'Uloga'}
                           </span>
                           
                           {avgRating > 0 && (
-                            <span className="flex items-center gap-0.5 text-[9px] font-mono font-black text-yellow-500 bg-yellow-400/5 px-1.5 py-0.5 rounded border border-yellow-500/10">
-                              <Star size={8} className="fill-yellow-500 text-yellow-500" />
+                            <span className="flex items-center gap-0.5 text-[9px] font-mono font-black text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded-full border border-yellow-400/20">
+                              <Star size={9} className="fill-yellow-400 text-yellow-400" />
                               {avgRating.toFixed(1)}
                             </span>
                           )}
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
