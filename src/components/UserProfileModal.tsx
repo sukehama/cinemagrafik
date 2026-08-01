@@ -21,6 +21,7 @@ Image as ImageIcon,
 Globe,
 Save,
 Eye,
+Camera,
 Activity,
 CheckCircle,
 XCircle,
@@ -101,22 +102,22 @@ lastActive: Date.now(),
 isOnline: true,
 };
 
-const [isEditing, setIsEditing] = React.useState(false);
-const [editedName, setEditedName] = React.useState('');
-const [editedPhoto, setEditedPhoto] = React.useState('');
-const [editedBio, setEditedBio] = React.useState('');
-const [editedStatusText, setEditedStatusText] = React.useState('');
-const [editedGradient, setEditedGradient] = React.useState('classic');
-const [editedBannerUrl, setEditedBannerUrl] = React.useState('');
-const [isSaving, setIsSaving] = React.useState(false);
-const [saveSuccess, setSaveSuccess] = React.useState(false);
+const [isEditing, setIsEditing] = useState(false);
+const [editedName, setEditedName] = useState('');
+const [editedPhoto, setEditedPhoto] = useState('');
+const [editedBio, setEditedBio] = useState('');
+const [editedStatusText, setEditedStatusText] = useState('');
+const [editedGradient, setEditedGradient] = useState('classic');
+const [editedBannerUrl, setEditedBannerUrl] = useState('');
+const [isSaving, setIsSaving] = useState(false);
+const [saveSuccess, setSaveSuccess] = useState(false);
 
 // Admin sync status
-const [isSyncingMaster, setIsSyncingMaster] = React.useState(false);
-const [syncMasterMsg, setSyncMasterMsg] = React.useState<string | null>(null);
+const [isSyncingMaster, setIsSyncingMaster] = useState(false);
+const [syncMasterMsg, setSyncMasterMsg] = useState<string | null>(null);
 
 // Synchronize internal state on profile change
-React.useEffect(() => {
+useEffect(() => {
 if (activeProfile) {
 setEditedName(activeProfile.displayName || '');
 setEditedPhoto(activeProfile.photoURL || '');
