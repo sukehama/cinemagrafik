@@ -307,24 +307,40 @@ export default function App() {
     persistData();
   }, [entries, isLoaded]);
 
-  // A. Listen to Firebase Authentication changes and sync user profile
+// A. Listen to Firebase Authentication changes and sync user profile
   useEffect(() => {
-    checkRedirectResult();
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      setIsAuthLoading(false);
-      if (currentUser) {
-        try {
-          const profile = await syncUserProfile(currentUser);
+    const handleAuthFlow = async () => {
+      // 1. Obavezno provjeri rezultat redirecta kada se vrati sa Google-a
+      try {
+        const redirectUser = await checkRedirectResult();
+        if (redirectUser) {
+          setUser(redirectUser);
+          const profile = await syncUserProfile(redirectUser);
           setUserProfile(profile);
-        } catch (err) {
-          console.error("Failed to sync user profile on auth state change:", err);
         }
-      } else {
-        setUserProfile(null);
+      } catch (err) {
+        console.error("Greška pri obradi redirect prijave:", err);
       }
-    });
-    return unsubscribe;
+
+      // 2. Standardni slušač stanja prijave
+      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        setUser(currentUser);
+        setIsAuthLoading(false);
+        if (currentUser) {
+          try {
+            const profile = await syncUserProfile(currentUser);
+            setUserProfile(profile);
+          } catch (err) {
+            console.error("Failed to sync user profile on auth state change:", err);
+          }
+        } else {
+          setUserProfile(null);
+        }
+      });
+      return unsubscribe;
+    };
+
+    handleAuthFlow();
   }, []);
 
   // B. Subscribe to Firestore real-time sync for universal catalog after local IndexedDB load
