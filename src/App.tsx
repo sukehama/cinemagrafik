@@ -2206,45 +2206,49 @@ export default function App() {
                           }}
                           className="bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-yellow-400/50 rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 active:scale-98 group cursor-pointer shadow-xl flex flex-col h-full relative"
                         >
-                          {/* Kontrole za precizno sortiranje/razvrstavanje na hover (Lijevo / Desno) */}
-                          <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-950/90 border border-zinc-800 rounded-lg p-0.5 shadow-xl">
-                            <button
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                setEntries(prev => {
-                                  const idx = prev.findIndex(item => item.id === e.id);
-                                  if (idx <= 0) return prev;
-                                  const updated = [...prev];
-                                  const temp = updated[idx];
-                                  updated[idx] = updated[idx - 1];
-                                  updated[idx - 1] = temp;
-                                  return updated;
-                                });
-                              }}
-                              className="p-1.5 text-zinc-400 hover:text-yellow-400 hover:bg-zinc-900 rounded cursor-pointer text-xs font-bold transition-colors"
-                              title="Pomjeri ulijevo"
-                            >
-                              ←
-                            </button>
-                            <button
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                setEntries(prev => {
-                                  const idx = prev.findIndex(item => item.id === e.id);
-                                  if (idx < 0 || idx >= prev.length - 1) return prev;
-                                  const updated = [...prev];
-                                  const temp = updated[idx];
-                                  updated[idx] = updated[idx + 1];
-                                  updated[idx + 1] = temp;
-                                  return updated;
-                                });
-                              }}
-                              className="p-1.5 text-zinc-400 hover:text-yellow-400 hover:bg-zinc-900 rounded cursor-pointer text-xs font-bold transition-colors"
-                              title="Pomjeri udesno"
-                            >
-                              →
-                            </button>
-                          </div>
+{/* Kontrole za precizno sortiranje/razvrstavanje na hover (Lijevo / Desno) */}
+<div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-950/90 border border-zinc-800 rounded-lg p-0.5 shadow-xl">
+  <button
+    onClick={(ev) => {
+      ev.stopPropagation();
+      requestAnimationFrame(() => {
+        setEntries(prev => {
+          const idx = prev.findIndex(item => item.id === e.id);
+          if (idx <= 0) return prev;
+          const updated = [...prev];
+          const temp = updated[idx];
+          updated[idx] = updated[idx - 1];
+          updated[idx - 1] = temp;
+          return updated;
+        });
+      });
+    }}
+    className="p-1.5 text-zinc-400 hover:text-yellow-400 hover:bg-zinc-900 rounded cursor-pointer text-xs font-bold transition-colors"
+    title="Pomjeri ulijevo"
+  >
+    ←
+  </button>
+  <button
+    onClick={(ev) => {
+      ev.stopPropagation();
+      requestAnimationFrame(() => {
+        setEntries(prev => {
+          const idx = prev.findIndex(item => item.id === e.id);
+          if (idx < 0 || idx >= prev.length - 1) return prev;
+          const updated = [...prev];
+          const temp = updated[idx];
+          updated[idx] = updated[idx + 1];
+          updated[idx + 1] = temp;
+          return updated;
+        });
+      });
+    }}
+    className="p-1.5 text-zinc-400 hover:text-yellow-400 hover:bg-zinc-900 rounded cursor-pointer text-xs font-bold transition-colors"
+    title="Pomjeri udesno"
+  >
+    →
+  </button>
+</div>
 
                           {/* Sličica postera */}
                           <div className="relative aspect-[2/3] w-full bg-zinc-950 overflow-hidden shrink-0">
@@ -3273,20 +3277,19 @@ export default function App() {
     entries={entries}
     onClose={() => setIsExportModalOpen(false)}
     onImportJSON={async (importedEntries) => {
-      // 1. Postavi lokalno stanje odmah
       setEntries(importedEntries);
-      
-      // 2. Pošalji sve u Firebase u jednom sigurnom Batch paketu!
       try {
+        await saveEntriesToDB(importedEntries);
         await syncAllLocalCatalogToFirestore(importedEntries);
         setShowSaveToast(true);
       } catch (err) {
-        console.error("Greška pri sinhronizaciji JSON-a na server:", err);
+        console.error("Greška pri uvozu na server:", err);
       }
     }}
     initialTab={exportInitialTab}
   />
 )}
+
       {/* SURPRISE ME CELEBRATION MODAL */}
       {isSurpriseOpen && (
         <SurpriseMeModal
@@ -3321,21 +3324,37 @@ export default function App() {
                   No, Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    if (deleteTarget === 'all') {
-                      setEntries([]);
-                      setActiveId('');
-                    } else if (deleteTarget === 'entry' && activeEntry) {
-                      const remaining = entries.filter(e => e.id !== activeEntry.id);
-                      setEntries(remaining);
-                      if (remaining.length > 0) {
-                        setActiveId(remaining[0].id);
-                      } else {
-                        setActiveId('');
-                      }
-                    }
-                    setDeleteTarget(null);
-                  }}
+onClick={async () => {
+  if (deleteTarget === 'all') {
+    setEntries([]);
+    setActiveId('');
+  } else if (deleteTarget === 'entry' && activeEntry) {
+    const targetToDelete = activeEntry;
+    const remaining = entries.filter(e => e.id !== targetToDelete.id);
+    
+    // 1. Odmah ažuriraj ekran
+    setEntries(remaining);
+    if (remaining.length > 0) {
+      setActiveId(remaining[0].id);
+    } else {
+      setActiveId('');
+    }
+
+    // 2. Trajno pošalji naredbu za brisanje direktno na Firebase server!
+    try {
+      await deleteEntryFromFirestore(
+        targetToDelete.id, 
+        targetToDelete.name, 
+        user?.uid, 
+        userProfile?.displayName || user?.displayName || undefined,
+        userProfile?.photoURL || user?.photoURL || undefined
+      );
+    } catch (err) {
+      console.error("Greška pri brisanju sa Firebase-a:", err);
+    }
+  }
+  setDeleteTarget(null);
+}}
                   className="flex-1 bg-red-550 hover:bg-red-600 text-white font-black py-2 px-4 rounded-xl text-xs transition-colors uppercase cursor-pointer"
                 >
                   Yes, Delete
