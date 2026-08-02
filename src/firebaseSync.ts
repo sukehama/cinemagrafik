@@ -13,10 +13,11 @@ import {
   query,
   orderBy,
   limit,
-  where
+  where,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { RatingEntry } from './types';
+import { RatingEntry, TrophyItem, PendingChangeRequest } from './types';
 
 export enum OperationType {
   CREATE = 'create',
@@ -76,8 +77,6 @@ export interface ContributionLog {
   timestamp: string;
 }
 
-import { TrophyItem, PendingChangeRequest } from './types';
-
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -94,6 +93,16 @@ export interface UserProfile {
   isModerator?: boolean;
   isAdmin?: boolean;
   trophies?: TrophyItem[];
+}
+
+export interface ChatMessage {
+  id?: string;
+  senderUid: string;
+  senderName: string;
+  senderPhoto?: string;
+  senderRole?: 'admin' | 'moderator' | 'user';
+  text: string;
+  createdAt?: any;
 }
 
 /**
@@ -488,4 +497,54 @@ export async function fetchContributions(userId?: string): Promise<ContributionL
     console.error('[Firebase Sync] Failed to fetch contributions:', err);
     return [];
   }
+}
+
+/**
+ * Chat mrežne funkcije za globalni chat u realnom vremenu
+ */
+export async function sendChatMessage(user: any, profile: UserProfile | null, text: string): Promise<void> {
+  if (!db || !user || !text.trim()) return;
+
+  const isMasterAdmin = profile?.email?.toLowerCase() === 'bilkufarimulhik006@gmail.com' || profile?.email?.toLowerCase() === 'rogerstold@gmail.com';
+  
+  const role = isMasterAdmin || profile?.isAdmin 
+    ? 'admin' 
+    : profile?.isModerator 
+      ? 'moderator' 
+      : 'user';
+
+  const messageData = {
+    senderUid: user.uid,
+    senderName: profile?.displayName || user.displayName || 'Korisnik',
+    senderPhoto: profile?.photoURL || user.photoURL || '',
+    senderRole: role,
+    text: text.trim(),
+    createdAt: serverTimestamp(),
+  };
+
+  try {
+    await addDoc(collection(db, 'global_chat'), messageData);
+  } catch (err) {
+    console.error('[Firebase Chat] Error sending chat message:', err);
+  }
+}
+
+export function subscribeToGlobalChat(callback: (messages: ChatMessage[]) => void): () => void {
+  if (!db) return () => {};
+
+  const q = query(
+    collection(db, 'global_chat'),
+    orderBy('createdAt', 'asc'),
+    limit(100)
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    const msgs: ChatMessage[] = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as ChatMessage));
+    callback(msgs);
+  }, (err) => {
+    console.error('[Firebase Chat] Subscription error:', err);
+  });
 }

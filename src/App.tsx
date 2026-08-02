@@ -3267,16 +3267,26 @@ export default function App() {
         />
       )}
 
-      {/* PORTOPOLIO EXPORT WORKSPACE CENTER MODAL */}
-      {isExportModalOpen && (
-        <ExportModal
-          entries={entries}
-          onClose={() => setIsExportModalOpen(false)}
-          onImportJSON={setEntries}
-          initialTab={exportInitialTab}
-        />
-      )}
-
+{/* PORTFOLIO EXPORT WORKSPACE CENTER MODAL */}
+{isExportModalOpen && (
+  <ExportModal
+    entries={entries}
+    onClose={() => setIsExportModalOpen(false)}
+    onImportJSON={async (importedEntries) => {
+      // 1. Postavi lokalno stanje odmah
+      setEntries(importedEntries);
+      
+      // 2. Pošalji sve u Firebase u jednom sigurnom Batch paketu!
+      try {
+        await syncAllLocalCatalogToFirestore(importedEntries);
+        setShowSaveToast(true);
+      } catch (err) {
+        console.error("Greška pri sinhronizaciji JSON-a na server:", err);
+      }
+    }}
+    initialTab={exportInitialTab}
+  />
+)}
       {/* SURPRISE ME CELEBRATION MODAL */}
       {isSurpriseOpen && (
         <SurpriseMeModal
