@@ -57,6 +57,7 @@ export default function ActorsView({
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [openFolderActorName, setOpenFolderActorName] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('actor_folders_v1', JSON.stringify(folders));
@@ -319,34 +320,54 @@ export default function ActorsView({
                     >
                       {/* Folder badges quick dropdown / toggle on top right */}
                       {folders.length > 0 && (
-                        <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="relative group/foldermenu">
+                        <div className="absolute top-2 right-2 z-20">
+                          <div className="relative">
                             <button
                               type="button"
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-6 h-6 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-yellow-400 flex items-center justify-center shadow-lg"
-                              title="Dodaj u folder"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenFolderActorName(prev => prev === actor.name ? null : actor.name);
+                              }}
+                              className={`w-7 h-7 rounded-full border flex items-center justify-center shadow-lg transition-all cursor-pointer ${
+                                openFolderActorName === actor.name
+                                  ? 'bg-yellow-400 text-zinc-955 border-yellow-300 scale-110 z-50'
+                                  : 'bg-zinc-900/90 border-zinc-700 text-zinc-400 hover:text-yellow-400 hover:scale-105'
+                              }`}
+                              title="Upravljaj folderima za glumca"
                             >
-                              <FolderPlus size={12} />
+                              <FolderPlus size={13} />
                             </button>
-                            <div className="absolute right-0 top-7 hidden group-hover/foldermenu:block bg-zinc-950 border border-zinc-800 rounded-xl p-2 shadow-2xl z-50 w-44 text-left space-y-1">
-                              <p className="text-[9px] font-black uppercase text-zinc-500 px-1 mb-1">Dodaj u folder:</p>
-                              {folders.map(f => {
-                                const inF = f.actorNames.some(n => n.toLowerCase() === actor.name.toLowerCase());
-                                return (
-                                  <button
-                                    key={f.id}
-                                    onClick={(e) => toggleActorInFolder(f.id, actor.name, e)}
-                                    className={`w-full text-left px-2 py-1 rounded-lg text-[11px] font-bold flex items-center justify-between ${
-                                      inF ? 'bg-yellow-400/10 text-yellow-400' : 'text-zinc-300 hover:bg-zinc-900'
-                                    }`}
+                            {openFolderActorName === actor.name && (
+                              <div 
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute right-0 top-8 bg-zinc-950 border border-yellow-400/40 rounded-2xl p-2.5 shadow-2xl z-[100] w-48 text-left space-y-1.5 animate-in fade-in zoom-in-95 duration-150"
+                              >
+                                <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5 px-1">
+                                  <p className="text-[9px] font-black uppercase text-yellow-400 tracking-wider">Folderi za glumca</p>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); setOpenFolderActorName(null); }}
+                                    className="text-zinc-500 hover:text-white text-[10px]"
                                   >
-                                    <span className="truncate">{f.name}</span>
-                                    {inF && <span className="text-[10px]">✓</span>}
+                                    <X size={12} />
                                   </button>
-                                );
-                              })}
-                            </div>
+                                </div>
+                                {folders.map(f => {
+                                  const inF = f.actorNames.some(n => n.toLowerCase() === actor.name.toLowerCase());
+                                  return (
+                                    <button
+                                      key={f.id}
+                                      onClick={(e) => toggleActorInFolder(f.id, actor.name, e)}
+                                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center justify-between transition cursor-pointer ${
+                                        inF ? 'bg-yellow-400/15 text-yellow-300 border border-yellow-400/30' : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
+                                      }`}
+                                    >
+                                      <span className="truncate">{f.name}</span>
+                                      {inF ? <span className="text-yellow-400 font-bold text-xs">✓</span> : <Plus size={12} className="text-zinc-500" />}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}

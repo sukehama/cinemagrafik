@@ -5,15 +5,19 @@ import {
   Send, 
   Image as ImageIcon, 
   Trash2, 
+  Smile, 
   Sparkles, 
   Upload, 
   X, 
   User as UserIcon,
-  Crown,
-  Shield
+  Filter,
+  Flame,
+  ThumbsUp,
+  Heart,
+  Laugh
 } from 'lucide-react';
 import { UserProfile } from '../firebaseSync';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 export interface ChatMessage {
@@ -21,10 +25,9 @@ export interface ChatMessage {
   userId: string;
   userName: string;
   userPhotoUrl: string;
-  userRole?: 'admin' | 'moderator' | 'user';
   text: string;
   imageUrl?: string;
-  createdAt: any;
+  createdAt: string;
   reactions?: Record<string, string[]>; // emoji -> array of userIds
 }
 
@@ -48,22 +51,35 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
 
   // Firestore real-time listener for chat messages
   useEffect(() => {
-    if (!db) return;
-
-    const chatCol = collection(db, 'chat_messages');
-    const q = query(chatCol, orderBy('createdAt', 'asc'), limit(150));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loaded: ChatMessage[] = [];
-      snapshot.forEach((docSnap) => {
-        loaded.push({ id: docSnap.id, ...(docSnap.data() as any) });
+    let unsubscribe: () => void;
+    try {
+      const chatCol = collection(db, 'chat_messages');
+      unsubscribe = onSnapshot(chatCol, (snapshot) => {
+        const loaded: ChatMessage[] = [];
+        snapshot.forEach((docSnap) => {
+          loaded.push({ id: docSnap.id, ...(docSnap.data() as any) });
+        });
+        // Sort chronologically ascending
+        loaded.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        setMessages(loaded);
+      }, (err) => {
+        console.warn('[Chat] Firestore error, fallback to local storage:', err);
+        const saved = localStorage.getItem('cinema-chat-messages');
+        if (saved) {
+          try { setMessages(JSON.parse(saved)); } catch (e) {}
+        }
       });
-      setMessages(loaded);
-    }, (err) => {
-      console.warn('[Chat] Firestore subscription error:', err);
-    });
+    } catch (err) {
+      console.warn('[Chat] Fallback to local storage:', err);
+      const saved = localStorage.getItem('cinema-chat-messages');
+      if (saved) {
+        try { setMessages(JSON.parse(saved)); } catch (e) {}
+      }
+    }
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   // Auto-scroll on new messages
@@ -90,7 +106,7 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
     reader.readAsDataURL(file);
   };
 
-  // Send message to Firebase
+  // Send message
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputMessage.trim() && !imageUrlInput) return;
@@ -99,20 +115,12 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
     const authorPhoto = currentUserProfile?.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80';
     const authorId = currentUserProfile?.uid || `guest-${guestName.replace(/\s+/g, '-').toLowerCase()}`;
 
-    const isMasterAdmin = currentUserProfile?.email?.toLowerCase() === 'bilkufarimulhik006@gmail.com' || currentUserProfile?.email?.toLowerCase() === 'rogerstold@gmail.com';
-    const role = isMasterAdmin || currentUserProfile?.isAdmin 
-      ? 'admin' 
-      : currentUserProfile?.isModerator 
-        ? 'moderator' 
-        : 'user';
-
-    const newMsg = {
+    const newMsg: Omit<ChatMessage, 'id'> = {
       userId: authorId,
       userName: authorName,
       userPhotoUrl: authorPhoto,
-      userRole: role,
       text: inputMessage.trim(),
-      imageUrl: imageUrlInput.trim() || null,
+      imageUrl: imageUrlInput.trim() || undefined,
       createdAt: new Date().toISOString(),
       reactions: {}
     };
@@ -125,7 +133,11 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
       const chatCol = collection(db, 'chat_messages');
       await addDoc(chatCol, newMsg);
     } catch (err) {
-      console.error('[Chat] Error sending message to Firebase:', err);
+      console.warn('[Chat] Saving to local storage fallback:', err);
+      const localMsg: ChatMessage = { ...newMsg, id: `msg-${Date.now()}` };
+      const updated = [...messages, localMsg];
+      setMessages(updated);
+      localStorage.setItem('cinema-chat-messages', JSON.stringify(updated));
     }
   };
 
@@ -154,18 +166,31 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
       const msgRef = doc(db, 'chat_messages', messageId);
       await updateDoc(msgRef, { reactions: updatedReactions });
     } catch (err) {
-      console.error('[Chat] Error toggling reaction:', err);
+      // Local fallback
+      const updated = messages.map(m => m.id === messageId ? { ...m, reactions: updatedReactions } : m);
+      setMessages(updated);
+      localStorage.setItem('cinema-chat-messages', JSON.stringify(updated));
     }
   };
 
-  // Delete message (Own message or Admin/Mod)
+  // Delete message
   const handleDeleteMessage = async (messageId: string) => {
-    if (!confirm('Da li ste sigurni da želite obrisati ovu poruku?')) return;
+    // Instant deletion from state & local cache
+    setMessages(prev => {
+      const updated = prev.filter(m => m.id !== messageId);
+      try {
+        localStorage.setItem('cinema-chat-messages', JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+
     try {
       const msgRef = doc(db, 'chat_messages', messageId);
       await deleteDoc(msgRef);
     } catch (err) {
-      console.error('[Chat] Error deleting message:', err);
+      console.warn('Firestore message delete error (removed locally):', err);
     }
   };
 
@@ -194,7 +219,7 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
               </span>
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Razgovaraj s drugim članovima u realnom vremenu
+              Razgovaraj s drugim ljudima
             </p>
           </div>
         </div>
@@ -226,7 +251,7 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
         </div>
       </div>
 
-      {/* GUEST NAME BAR (if not logged in) */}
+      {/* GUEST NAME BAR (if not logged in with Google) */}
       {!currentUserProfile && (
         <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-2xl flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 text-amber-300 font-medium">
@@ -262,8 +287,6 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
               ? msg.userId === currentUserProfile.uid 
               : msg.userName === guestName;
 
-            const canDelete = isMe || currentUserProfile?.isAdmin || currentUserProfile?.isModerator;
-
             return (
               <motion.div
                 key={msg.id}
@@ -273,7 +296,7 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
               >
                 {/* Author Avatar */}
                 <img
-                  src={msg.userPhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80'}
+                  src={msg.userPhotoUrl}
                   alt={msg.userName}
                   onClick={() => {
                     if (onSelectUser) {
@@ -282,8 +305,8 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
                         displayName: msg.userName,
                         photoURL: msg.userPhotoUrl,
                         email: '',
-                        createdAt: msg.createdAt || new Date().toISOString(),
-                        lastActive: msg.createdAt || new Date().toISOString(),
+                        createdAt: msg.createdAt,
+                        lastActive: msg.createdAt,
                         contributionsCount: 0
                       });
                     }
@@ -296,8 +319,8 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
                 {/* Bubble Container */}
                 <div className={`max-w-[82%] sm:max-w-[70%] space-y-1 ${isMe ? 'items-end' : 'items-start'}`}>
                   
-                  {/* Author Name + Time + Badges */}
-                  <div className={`flex items-center gap-1.5 text-[10px] text-zinc-400 px-1 ${isMe ? 'flex-row-reverse' : ''}`}>
+                  {/* Author Name + Time */}
+                  <div className={`flex items-center gap-2 text-[10px] text-zinc-400 px-1 ${isMe ? 'flex-row-reverse' : ''}`}>
                     <button
                       type="button"
                       onClick={() => {
@@ -307,8 +330,8 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
                             displayName: msg.userName,
                             photoURL: msg.userPhotoUrl,
                             email: '',
-                            createdAt: msg.createdAt || new Date().toISOString(),
-                            lastActive: msg.createdAt || new Date().toISOString(),
+                            createdAt: msg.createdAt,
+                            lastActive: msg.createdAt,
                             contributionsCount: 0
                           });
                         }
@@ -318,32 +341,22 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
                     >
                       {msg.userName}
                     </button>
-
-                    {/* Role Badges */}
-                    {msg.userRole === 'admin' && (
-                      <span className="bg-yellow-400/20 text-yellow-400 border border-yellow-400/40 px-1.5 py-0.2 rounded text-[8px] uppercase font-black flex items-center gap-0.5">
-                        <Crown size={9} /> Admin
-                      </span>
-                    )}
-                    {msg.userRole === 'moderator' && (
-                      <span className="bg-purple-500/20 text-purple-300 border border-purple-500/40 px-1.5 py-0.2 rounded text-[8px] uppercase font-black flex items-center gap-0.5">
-                        <Shield size={9} /> Mod
-                      </span>
-                    )}
-
                     <span>•</span>
                     <span>
-                      {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Upravo'}
+                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
 
-                    {/* Delete action */}
-                    {canDelete && (
+                    {/* Delete action for own message or admin */}
+                    {(isMe || currentUserProfile?.isAdmin || currentUserProfile?.isModerator) && (
                       <button
-                        onClick={() => handleDeleteMessage(msg.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-300 p-0.5 ml-1 cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMessage(msg.id);
+                        }}
+                        className="opacity-70 hover:opacity-100 text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-500/10 transition-all ml-1 cursor-pointer"
                         title="Obriši poruku"
                       >
-                        <Trash2 size={11} />
+                        <Trash2 size={12} />
                       </button>
                     )}
                   </div>
@@ -445,7 +458,7 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
             <button
               type="button"
               onClick={() => setImageUrlInput('')}
-              className="p-1 text-zinc-400 hover:text-white cursor-pointer"
+              className="p-1 text-zinc-400 hover:text-white"
             >
               <X size={16} />
             </button>
@@ -463,7 +476,7 @@ export default function ChatView({ currentUserProfile, onSelectUser }: ChatViewP
             >
               <div className="flex items-center justify-between text-xs font-bold text-zinc-300">
                 <span>Priloži sliku / mim:</span>
-                <button type="button" onClick={() => setIsImageInputOpen(false)} className="text-zinc-500 hover:text-white cursor-pointer">
+                <button type="button" onClick={() => setIsImageInputOpen(false)} className="text-zinc-500 hover:text-white">
                   <X size={14} />
                 </button>
               </div>

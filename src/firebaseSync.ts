@@ -13,11 +13,10 @@ import {
   query,
   orderBy,
   limit,
-  where,
-  serverTimestamp
+  where
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { RatingEntry, TrophyItem, PendingChangeRequest } from './types';
+import { RatingEntry } from './types';
 
 export enum OperationType {
   CREATE = 'create',
@@ -77,6 +76,8 @@ export interface ContributionLog {
   timestamp: string;
 }
 
+import { TrophyItem, PendingChangeRequest } from './types';
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -87,22 +88,13 @@ export interface UserProfile {
   contributionsCount: number;
   bio?: string;
   bannerUrl?: string;
-  profileGradientStyle?: string;
+  profileGradientStyle?: string; // 'classic' | 'cyberpunk' | 'sunset' | 'emerald' | 'cosmic' | 'gold'
   statusText?: string;
   isOnline?: boolean;
   isModerator?: boolean;
   isAdmin?: boolean;
   trophies?: TrophyItem[];
-}
-
-export interface ChatMessage {
-  id?: string;
-  senderUid: string;
-  senderName: string;
-  senderPhoto?: string;
-  senderRole?: 'admin' | 'moderator' | 'user';
-  text: string;
-  createdAt?: any;
+  bossfightHighScore?: number;
 }
 
 /**
@@ -136,7 +128,7 @@ export async function setUserModeratorStatus(targetUid: string, isModerator: boo
 }
 
 /**
- * Submit pending change request (for regular non-moderator users)
+ * Submit pending change request (for regular users)
  */
 export async function submitPendingChangeRequest(
   userId: string,
@@ -196,130 +188,55 @@ export async function updateChangeRequestStatus(requestId: string, status: 'appr
   }
 }
 
+
+/**
+ * Syncs entries from Firestore in real-time.
+ * If Firestore is empty and localEntries has data, migrates localEntries to Firestore.
+ */
 export function sanitizeForFirestore<T>(data: T): T {
   if (data === undefined || data === null) return data;
   return JSON.parse(JSON.stringify(data));
 }
 
+/* OLD FIRESTORE CATALOG SYNC FUNCTIONS - DISABLED FOR 100% OFFLINE INDEXEDDB CATALOG */
+
 export function syncFirestoreEntries(
-  localEntries: RatingEntry[],
-  onSync: (entries: RatingEntry[]) => void,
+  _localEntries: RatingEntry[],
+  _onSync: (entries: RatingEntry[]) => void,
   onSyncStateChange: (syncing: boolean, error?: string) => void
 ): () => void {
-  onSyncStateChange(true);
-  
-  const entriesCol = collection(db, 'entries');
-  
-  const unsubscribe = onSnapshot(entriesCol, async (snapshot) => {
-    try {
-      if (snapshot.empty) {
-        if (localEntries.length > 0) {
-          console.log(`[Firebase Sync] Firestore is empty. Migrating ${localEntries.length} local entries...`);
-          const CHUNK_SIZE = 400;
-          for (let i = 0; i < localEntries.length; i += CHUNK_SIZE) {
-            const chunk = localEntries.slice(i, i + CHUNK_SIZE);
-            const batch = writeBatch(db);
-            chunk.forEach((entry) => {
-              const docRef = doc(db, 'entries', entry.id);
-              batch.set(docRef, sanitizeForFirestore(entry));
-            });
-            await batch.commit();
-          }
-          console.log('[Firebase Sync] Migration completed successfully.');
-          onSync(localEntries);
-        } else {
-          onSync([]);
-        }
-      } else {
-        const firestoreEntries: RatingEntry[] = [];
-        snapshot.forEach((doc) => {
-          firestoreEntries.push(doc.data() as RatingEntry);
-        });
-        onSync(firestoreEntries);
-      }
-      onSyncStateChange(false);
-    } catch (err: any) {
-      console.error('[Firebase Sync] Error in snapshot processing:', err);
-      onSyncStateChange(false, err.message);
-    }
-  }, (err) => {
-    console.error('[Firebase Sync] Real-time subscription error:', err);
-    onSyncStateChange(false, err.message);
-  });
-
-  return unsubscribe;
+  // Catalog is 100% offline via IndexedDB
+  onSyncStateChange(false);
+  return () => {};
 }
 
-export async function syncAllLocalCatalogToFirestore(entries: RatingEntry[]): Promise<void> {
-  try {
-    const CHUNK_SIZE = 400;
-    for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
-      const chunk = entries.slice(i, i + CHUNK_SIZE);
-      const batch = writeBatch(db);
-      chunk.forEach((entry) => {
-        const docRef = doc(db, 'entries', entry.id);
-        batch.set(docRef, sanitizeForFirestore(entry));
-      });
-      await batch.commit();
-    }
-    console.log(`[Firebase Master Sync] Successfully uploaded ${entries.length} entries to Firestore.`);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, 'entries_batch_sync');
-  }
+export async function syncAllLocalCatalogToFirestore(_entries: RatingEntry[]): Promise<void> {
+  console.log('[Offline Catalog] Local sync active, server catalog upload bypassed.');
 }
 
 export async function saveEntryToFirestore(
-  entry: RatingEntry,
-  actionType: 'add' | 'edit',
-  userId?: string,
-  userName?: string,
-  userPhotoUrl?: string
+  _entry: RatingEntry,
+  _actionType: 'add' | 'edit',
+  _userId?: string,
+  _userName?: string,
+  _userPhotoUrl?: string
 ): Promise<void> {
-  const docRef = doc(db, 'entries', entry.id);
-  try {
-    await setDoc(docRef, sanitizeForFirestore(entry));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `entries/${entry.id}`);
-  }
-
-  if (userId && userName) {
-    await logContribution({
-      userId,
-      userName,
-      userPhotoUrl: userPhotoUrl || '',
-      actionType,
-      entryName: entry.name,
-      details: actionType === 'add' ? 'Dodao novi naslov u katalog' : 'Izmijenio detalje naslova',
-    });
-  }
+  // Offline IndexedDB catalog only
 }
 
 export async function deleteEntryFromFirestore(
-  entryId: string,
-  entryName: string,
-  userId?: string,
-  userName?: string,
-  userPhotoUrl?: string
+  _entryId: string,
+  _entryName: string,
+  _userId?: string,
+  _userName?: string,
+  _userPhotoUrl?: string
 ): Promise<void> {
-  const docRef = doc(db, 'entries', entryId);
-  try {
-    await deleteDoc(docRef);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `entries/${entryId}`);
-  }
-
-  if (userId && userName) {
-    await logContribution({
-      userId,
-      userName,
-      userPhotoUrl: userPhotoUrl || '',
-      actionType: 'delete',
-      entryName,
-      details: 'Obrisao naslov iz kataloga',
-    });
-  }
+  // Offline IndexedDB catalog only
 }
 
+/**
+ * Logs a contribution to the global activity feed and updates user contribution count.
+ */
 export async function logContribution(params: {
   userId: string;
   userName: string;
@@ -332,6 +249,7 @@ export async function logContribution(params: {
     const contribsCol = collection(db, 'contributions');
     const timestamp = new Date().toISOString();
     
+    // 1. Add contribution log document
     try {
       await addDoc(contribsCol, {
         ...params,
@@ -341,6 +259,7 @@ export async function logContribution(params: {
       handleFirestoreError(err, OperationType.CREATE, 'contributions');
     }
 
+    // 2. Increment user contribution count
     const userRef = doc(db, 'users', params.userId);
     let userSnap;
     try {
@@ -363,6 +282,9 @@ export async function logContribution(params: {
   }
 }
 
+/**
+ * Syncs or creates user profile in Firestore upon successful Google Login.
+ */
 export async function syncUserProfile(user: any): Promise<UserProfile> {
   const userRef = doc(db, 'users', user.uid);
   let userSnap;
@@ -381,8 +303,7 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
 
   const timestamp = new Date().toISOString();
 
-  // Master Admin E-mail
-  const isMasterAdmin = user.email?.toLowerCase() === 'bilkufarimulhik006@gmail.com' || user.email?.toLowerCase() === 'rogerstold@gmail.com';
+  const isMasterAdmin = user.email?.toLowerCase() === 'rogerstold@gmail.com' || user.email?.toLowerCase() === 'sukmanahmed.09@gmail.com';
 
   if (userSnap && userSnap.exists()) {
     const existingData = userSnap.data() as UserProfile;
@@ -393,6 +314,7 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
       lastActive: timestamp,
       isOnline: true,
     };
+    // Update last active and set online - handle failures gracefully when offline
     try {
       await updateDoc(userRef, {
         isAdmin: updatedProfile.isAdmin,
@@ -405,6 +327,7 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
     }
     return updatedProfile;
   } else {
+    // Create new profile with customizable default fields
     const newProfile: UserProfile = {
       uid: user.uid,
       displayName: user.displayName || user.email?.split('@')[0] || 'Korisnik',
@@ -425,12 +348,15 @@ export async function syncUserProfile(user: any): Promise<UserProfile> {
     try {
       await setDoc(userRef, newProfile);
     } catch (err) {
-      console.warn('[Firebase Sync] Failed to create new user profile in Firestore (offline):', err);
+      console.warn('[Firebase Sync] Failed to create new user profile in Firestore (offline), using local fallback profile:', err);
     }
     return newProfile;
   }
 }
 
+/**
+ * Updates a user's profile with custom settings.
+ */
 export async function updateUserProfile(uid: string, data: Partial<UserProfile>): Promise<void> {
   const userRef = doc(db, 'users', uid);
   try {
@@ -440,6 +366,9 @@ export async function updateUserProfile(uid: string, data: Partial<UserProfile>)
   }
 }
 
+/**
+ * Fetches any user's profile by UID.
+ */
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const userRef = doc(db, 'users', userId);
   try {
@@ -462,6 +391,9 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   return null;
 }
 
+/**
+ * Fetches recent contributions for the user or globally.
+ */
 export async function fetchContributions(userId?: string): Promise<ContributionLog[]> {
   try {
     const contribsCol = collection(db, 'contributions');
@@ -497,54 +429,4 @@ export async function fetchContributions(userId?: string): Promise<ContributionL
     console.error('[Firebase Sync] Failed to fetch contributions:', err);
     return [];
   }
-}
-
-/**
- * Chat mrežne funkcije za globalni chat u realnom vremenu
- */
-export async function sendChatMessage(user: any, profile: UserProfile | null, text: string): Promise<void> {
-  if (!db || !user || !text.trim()) return;
-
-  const isMasterAdmin = profile?.email?.toLowerCase() === 'bilkufarimulhik006@gmail.com' || profile?.email?.toLowerCase() === 'rogerstold@gmail.com';
-  
-  const role = isMasterAdmin || profile?.isAdmin 
-    ? 'admin' 
-    : profile?.isModerator 
-      ? 'moderator' 
-      : 'user';
-
-  const messageData = {
-    senderUid: user.uid,
-    senderName: profile?.displayName || user.displayName || 'Korisnik',
-    senderPhoto: profile?.photoURL || user.photoURL || '',
-    senderRole: role,
-    text: text.trim(),
-    createdAt: serverTimestamp(),
-  };
-
-  try {
-    await addDoc(collection(db, 'global_chat'), messageData);
-  } catch (err) {
-    console.error('[Firebase Chat] Error sending chat message:', err);
-  }
-}
-
-export function subscribeToGlobalChat(callback: (messages: ChatMessage[]) => void): () => void {
-  if (!db) return () => {};
-
-  const q = query(
-    collection(db, 'global_chat'),
-    orderBy('createdAt', 'asc'),
-    limit(100)
-  );
-
-  return onSnapshot(q, (snapshot) => {
-    const msgs: ChatMessage[] = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as ChatMessage));
-    callback(msgs);
-  }, (err) => {
-    console.error('[Firebase Chat] Subscription error:', err);
-  });
 }

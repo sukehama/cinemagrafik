@@ -245,32 +245,55 @@ export default function App() {
     }
   };
 
-  const handleOpenSocialProfile = async (target: string | Partial<UserProfile> & { uid: string }) => {
+  const handleOpenSocialProfile = async (target: string | (Partial<UserProfile> & { uid: string })) => {
     setIsSocialContributionsLoading(true);
-    setSelectedSocialProfile(null);
-    setIsSocialProfileOpen(true);
     const userId = typeof target === 'string' ? target : target.uid;
+
+    // Instantly set fallback/current profile so UI never turns white or blank
+    if (userProfile && (userId === userProfile.uid || userId === user?.uid)) {
+      setSelectedSocialProfile(userProfile);
+    } else if (typeof target === 'object' && target.uid) {
+      setSelectedSocialProfile({
+        uid: target.uid,
+        displayName: target.displayName || 'Korisnik Zajednice',
+        email: target.email || '',
+        photoURL: target.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
+        createdAt: target.createdAt || new Date().toISOString(),
+        lastActive: target.lastActive || new Date().toISOString(),
+        contributionsCount: target.contributionsCount || 0,
+        bio: target.bio,
+        bannerUrl: target.bannerUrl,
+        statusText: target.statusText || 'Korisnik iz chata',
+        trophies: target.trophies || []
+      });
+    } else {
+      setSelectedSocialProfile({
+        uid: userId,
+        displayName: 'Korisnik Zajednice',
+        email: '',
+        photoURL: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+        contributionsCount: 0,
+        statusText: 'Korisnik iz chata'
+      });
+    }
+    
+    setIsSocialProfileOpen(true);
+
     try {
       const profileToView = await getUserProfile(userId);
       if (profileToView) {
         setSelectedSocialProfile(profileToView);
-        const logs = await fetchContributions(userId);
-        setSocialContributions(logs);
-      } else if (typeof target === 'object') {
-        setSelectedSocialProfile({
-          uid: target.uid,
-          displayName: target.displayName || 'Anoniman Korisnik',
-          photoURL: target.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
-          email: target.email || '',
-          createdAt: target.createdAt || new Date().toISOString(),
-          lastActive: target.lastActive || new Date().toISOString(),
-          contributionsCount: target.contributionsCount || 0,
-          statusText: 'Korisnik iz chata'
-        });
-        setSocialContributions([]);
+        try {
+          const logs = await fetchContributions(userId);
+          setSocialContributions(logs);
+        } catch (e) {
+          setSocialContributions([]);
+        }
       }
     } catch (err) {
-      console.error("Failed to load community user profile:", err);
+      console.warn("Could not fetch remote profile details, using local fallback:", err);
     } finally {
       setIsSocialContributionsLoading(false);
     }
@@ -389,95 +412,6 @@ export default function App() {
     });
     return unsubscribe;
   }, []);
-
-  // B. Subscribe to Firestore real-time sync for universal catalog after local IndexedDB load
-  useEffect(() => {
-    if (!isLoaded || hasStartedSync.current) return;
-    hasStartedSync.current = true;
-    
-    console.log(`[Firebase] Starting real-time Firestore sync with ${entries.length} local candidate entries...`);
-    
-    const unsubscribe = syncFirestoreEntries(
-      entries, // Current local entries to migrate if Firestore is empty
-      (syncedEntries) => {
-        isApplyingSnapshotRef.current = true;
-        setEntries(syncedEntries);
-      },
-      (syncing, error) => {
-         setIsSyncing(syncing);
-         setSyncError(error || null);
-         if (!syncing && !error) {
-           isFirestoreSyncedRef.current = true;
-         }
-      }
-    );
-    
-    return () => {
-      unsubscribe();
-    };
-  }, [isLoaded]);
-
-  // C. Synchronize local catalog edits automatically back to the universal Firestore collection
-  useEffect(() => {
-    if (!isLoaded || !isFirestoreSyncedRef.current) return;
-    
-    const syncLocalChangesToFirestore = async () => {
-      if (isApplyingSnapshotRef.current) {
-        // This state update came from Firestore, so we don't write it back
-        isApplyingSnapshotRef.current = false;
-        prevEntriesRef.current = entries;
-        return;
-      }
-      
-      // Compare entries with prevEntriesRef.current to find deleted or modified items
-      const prevMap = new Map(prevEntriesRef.current.map(e => [e.id, e]));
-      const currentMap = new Map(entries.map(e => [e.id, e]));
-      
-      // 1. Find deleted entries
-      for (const prevEntry of prevEntriesRef.current) {
-        if (!currentMap.has(prevEntry.id)) {
-          console.log(`[Sync] Local deletion detected for: ${prevEntry.name}`);
-          try {
-            await deleteEntryFromFirestore(
-              prevEntry.id, 
-              prevEntry.name, 
-              user?.uid, 
-              userProfile?.displayName || user?.displayName || undefined,
-              userProfile?.photoURL || user?.photoURL || undefined
-            );
-          } catch (err) {
-            console.error(`Failed to sync deletion for ${prevEntry.name}:`, err);
-          }
-        }
-      }
-      
-      // 2. Find added or modified entries
-      for (const currentEntry of entries) {
-        const prevEntry = prevMap.get(currentEntry.id);
-        const isNew = !prevEntry;
-        const isModified = prevEntry && JSON.stringify(prevEntry) !== JSON.stringify(currentEntry);
-        
-         if (isNew || isModified) {
-           console.log(`[Sync] Local ${isNew ? 'addition' : 'modification'} detected for: ${currentEntry.name}`);
-           try {
-             await saveEntryToFirestore(
-               currentEntry,
-               isNew ? 'add' : 'edit',
-               user?.uid,
-               userProfile?.displayName || user?.displayName || undefined,
-               userProfile?.photoURL || user?.photoURL || undefined
-             );
-           } catch (err) {
-             console.error(`Failed to sync ${isNew ? 'add' : 'edit'} for ${currentEntry.name}:`, err);
-           }
-         }
-       }
-       
-       prevEntriesRef.current = entries;
-     };
-     
-     syncLocalChangesToFirestore();
-   }, [entries, isLoaded, user, userProfile]);
 
   // D. Load contributions history when user opens the profile view
   useEffect(() => {
@@ -2018,6 +1952,30 @@ export default function App() {
                 className="space-y-8" 
                 id="glavni-meni-view"
               >
+                {/* VEDO TROPHY BANNER IF UNLOCKED */}
+                {localStorage.getItem('vedo_trophy_unlocked') === 'true' && (
+                  <div className="bg-gradient-to-r from-yellow-500/20 via-amber-500/10 to-purple-600/20 border-2 border-yellow-400/60 p-4 rounded-3xl flex items-center justify-between gap-4 shadow-[0_0_30px_rgba(250,204,21,0.2)] animate-in fade-in zoom-in-95 duration-200">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-yellow-400 text-zinc-955 flex items-center justify-center font-black shadow-lg shadow-yellow-400/30">
+                        <Trophy size={24} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-black uppercase text-yellow-400 tracking-wide">
+                            Vedo Dela Slayer 🏆
+                          </h3>
+                          <span className="bg-yellow-400/20 text-yellow-300 border border-yellow-400/40 px-2 py-0.5 rounded-full text-[9px] font-black uppercase">
+                            Otključan Trofej
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-300 font-medium mt-0.5">
+                          Pobijedili ste Vedo Dela Boss-a i zaštitili Cinema Grafik katalog!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* WELCOME BANNER */}
                 <div className="relative p-6 sm:p-8 rounded-3xl overflow-hidden border border-zinc-800/80 bg-zinc-900/60 backdrop-blur-md shadow-2xl">
                   {/* Subtle decorative mesh background */}
@@ -2050,34 +2008,6 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-{/* TROPHY COLLECTION BANNER (PRIKAZUJE SE ISKLJUČIVO NAKON ŠTO JE KUP OSVOJEN POBJEDOM) */}
-                {(localStorage.getItem('has_vedo_trophy') === 'true' || userProfile?.trophies?.some(t => t.id === 'vedo-slayer')) && (
-                  <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/15 to-amber-500/10 border-2 border-yellow-500/40 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-md animate-fade-in">
-                    <div className="flex items-center gap-4">
-                      {/* DIZAJN TROFEJA: ZLATNI KRUG SA YELLOW OUTLINE-OM I SLIKOM VELIKOG TROFEJA UNUTRA */}
-                      <div className="relative w-16 h-16 rounded-full bg-zinc-950 border-4 border-yellow-400 flex items-center justify-center shadow-[0_0_20px_rgba(250,204,21,0.5)] shrink-0">
-                        <Trophy size={32} className="text-yellow-400 animate-pulse" />
-                      </div>
-                      
-                      <div>
-                        <h4 className="text-xs font-black uppercase text-yellow-400 tracking-widest">
-                          KOLEKCIJA TROFEJA
-                        </h4>
-                        <p className="text-[11px] text-zinc-300 font-bold mt-0.5">
-                          Osvojeni pehari u Cinema Grafik katalogu
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* SREDINA: KUP POBJEDE BEDŽ */}
-                    <div className="flex items-center gap-2.5 bg-zinc-950/90 px-5 py-2.5 rounded-xl border-2 border-yellow-400/60 shadow-inner">
-                      <Trophy size={18} className="text-yellow-400 animate-bounce shrink-0" />
-                      <span className="text-xs font-black text-white uppercase tracking-wider">
-                        Kup Pobjede Vedo Dele 🏆
-                      </span>
-                    </div>
-                  </div>
-                )}
 
                 {/* STATISTICS BENTO GRID */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2193,64 +2123,78 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-{entries.filter(e => e.type !== 'universe').map((e, index) => {
+                    {entries.filter(e => e.type !== 'universe').map((e, index) => {
                       const avgRating = calculateAverageRating(e);
-
                       return (
                         <div
                           key={`home-dir-${e.id}`}
-                          onClick={(ev) => {
-                            // Siguran klik bez bloka
+                          draggable={true}
+                          onDragStart={(ev) => {
+                            ev.dataTransfer.setData('text/plain', e.id);
+                          }}
+                          onDragOver={(ev) => ev.preventDefault()}
+                          onDrop={(ev) => {
+                            ev.preventDefault();
+                            const draggedId = ev.dataTransfer.getData('text/plain');
+                            if (!draggedId || draggedId === e.id) return;
+                            setEntries(prev => {
+                              const fromIndex = prev.findIndex(item => item.id === draggedId);
+                              const toIndex = prev.findIndex(item => item.id === e.id);
+                              if (fromIndex === -1 || toIndex === -1) return prev;
+                              const updated = [...prev];
+                              const [removed] = updated.splice(fromIndex, 1);
+                              updated.splice(toIndex, 0, removed);
+                              return updated;
+                            });
+                          }}
+                          onClick={() => {
                             handleSelectEntry(e.id);
+                            setActiveTab('katalog');
                             setSelectedActorName(null);
                           }}
                           className="bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-yellow-400/50 rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 active:scale-98 group cursor-pointer shadow-xl flex flex-col h-full relative"
                         >
-{/* Kontrole za precizno sortiranje/razvrstavanje na hover (Lijevo / Desno) */}
-<div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-950/90 border border-zinc-800 rounded-lg p-0.5 shadow-xl">
-  <button
-    onClick={(ev) => {
-      ev.stopPropagation();
-      requestAnimationFrame(() => {
-        setEntries(prev => {
-          const idx = prev.findIndex(item => item.id === e.id);
-          if (idx <= 0) return prev;
-          const updated = [...prev];
-          const temp = updated[idx];
-          updated[idx] = updated[idx - 1];
-          updated[idx - 1] = temp;
-          return updated;
-        });
-      });
-    }}
-    className="p-1.5 text-zinc-400 hover:text-yellow-400 hover:bg-zinc-900 rounded cursor-pointer text-xs font-bold transition-colors"
-    title="Pomjeri ulijevo"
-  >
-    ←
-  </button>
-  <button
-    onClick={(ev) => {
-      ev.stopPropagation();
-      requestAnimationFrame(() => {
-        setEntries(prev => {
-          const idx = prev.findIndex(item => item.id === e.id);
-          if (idx < 0 || idx >= prev.length - 1) return prev;
-          const updated = [...prev];
-          const temp = updated[idx];
-          updated[idx] = updated[idx + 1];
-          updated[idx + 1] = temp;
-          return updated;
-        });
-      });
-    }}
-    className="p-1.5 text-zinc-400 hover:text-yellow-400 hover:bg-zinc-900 rounded cursor-pointer text-xs font-bold transition-colors"
-    title="Pomjeri udesno"
-  >
-    →
-  </button>
-</div>
+                          {/* Reorder controls on hover */}
+                          <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-950/90 border border-zinc-800 rounded-lg p-0.5">
+                            <button
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setEntries(prev => {
+                                  const idx = prev.findIndex(item => item.id === e.id);
+                                  if (idx <= 0) return prev;
+                                  const updated = [...prev];
+                                  const temp = updated[idx];
+                                  updated[idx] = updated[idx - 1];
+                                  updated[idx - 1] = temp;
+                                  return updated;
+                                });
+                              }}
+                              className="p-1 text-zinc-400 hover:text-yellow-400 cursor-pointer text-[10px]"
+                              title="Pomjeri lijevo"
+                            >
+                              ←
+                            </button>
+                            <button
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setEntries(prev => {
+                                  const idx = prev.findIndex(item => item.id === e.id);
+                                  if (idx < 0 || idx >= prev.length - 1) return prev;
+                                  const updated = [...prev];
+                                  const temp = updated[idx];
+                                  updated[idx] = updated[idx + 1];
+                                  updated[idx + 1] = temp;
+                                  return updated;
+                                });
+                              }}
+                              className="p-1 text-zinc-400 hover:text-yellow-400 cursor-pointer text-[10px]"
+                              title="Pomjeri desno"
+                            >
+                              →
+                            </button>
+                          </div>
 
-                          {/* Sličica postera */}
+                          {/* Poster thumbnail container */}
                           <div className="relative aspect-[2/3] w-full bg-zinc-950 overflow-hidden shrink-0">
                             <img
                               src={e.posterUrl}
@@ -2258,7 +2202,7 @@ export default function App() {
                               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                               referrerPolicy="no-referrer"
                             />
-                            {/* Oznaka kategorije */}
+                            {/* Overlay category badge */}
                             <span className={`absolute top-3 left-3 px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider ${
                               e.type === 'show' 
                                 ? 'bg-emerald-950/95 text-emerald-400 border border-emerald-900/50' 
@@ -2269,14 +2213,14 @@ export default function App() {
                               {e.type === 'show' ? 'Serija' : e.type === 'universe' ? 'Univerzum' : 'Film'}
                             </span>
 
-                            {/* Prosječna ocjena */}
+                            {/* Average rating star badge */}
                             <div className="absolute bottom-3 right-3 bg-zinc-950/90 border border-zinc-800 px-2 py-1 rounded-lg flex items-center gap-1 text-[10px] font-black text-yellow-400 font-mono shadow-md">
                               <Star size={10} className="fill-current" />
                               <span>{avgRating > 0 ? avgRating.toFixed(1) : '—'}</span>
                             </div>
                           </div>
 
-                          {/* Detalji */}
+                          {/* Info section */}
                           <div className="p-4 flex flex-col justify-between flex-1 space-y-2">
                             <div>
                               <p className="text-[10px] font-mono font-bold text-zinc-400">{e.year}</p>
@@ -2325,6 +2269,10 @@ export default function App() {
                   }}
                   onNavigateToEntry={(entryId) => {
                     handleSelectEntry(entryId);
+                    setActiveTab('katalog');
+                  }}
+                  onDeleteUniverse={(universeId) => {
+                    setEntries(prev => prev.filter(e => e.id !== universeId));
                   }}
                 />
               </motion.div>
@@ -2343,6 +2291,7 @@ export default function App() {
                   setSelectedActorName={setSelectedActorName}
                   onNavigateToEntry={(entryId, seasonNum, epNum) => {
                     handleNavigateFromActorCatalog(entryId, seasonNum, epNum);
+                    setActiveTab('katalog');
                   }}
                   onUpdateActorGlobalDetails={handleUpdateActorGlobalDetails}
                   onUpdateActorAppearanceRating={handleUpdateActorAppearanceRating}
@@ -2372,7 +2321,10 @@ export default function App() {
                 exit={{ opacity: 0, x: 16 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
-                <ChatView currentUserProfile={userProfile} />
+                <ChatView 
+                  currentUserProfile={userProfile} 
+                  onSelectUser={handleOpenSocialProfile}
+                />
               </motion.div>
             ) : (
               <motion.div
@@ -3271,24 +3223,22 @@ export default function App() {
         />
       )}
 
-{/* PORTFOLIO EXPORT WORKSPACE CENTER MODAL */}
-{isExportModalOpen && (
-  <ExportModal
-    entries={entries}
-    onClose={() => setIsExportModalOpen(false)}
-    onImportJSON={async (importedEntries) => {
-      setEntries(importedEntries);
-      try {
-        await saveEntriesToDB(importedEntries);
-        await syncAllLocalCatalogToFirestore(importedEntries);
-        setShowSaveToast(true);
-      } catch (err) {
-        console.error("Greška pri uvozu na server:", err);
-      }
-    }}
-    initialTab={exportInitialTab}
-  />
-)}
+      {/* PORTOPOLIO EXPORT WORKSPACE CENTER MODAL */}
+      {isExportModalOpen && (
+        <ExportModal
+          entries={entries}
+          onClose={() => setIsExportModalOpen(false)}
+          onImportJSON={async (importedEntries) => {
+            if (!importedEntries || importedEntries.length === 0) return;
+            setEntries(importedEntries);
+            setActiveId(importedEntries[0].id);
+            await saveEntriesToDB(importedEntries);
+            setShowSaveToast(true);
+            setTimeout(() => setShowSaveToast(false), 3000);
+          }}
+          initialTab={exportInitialTab}
+        />
+      )}
 
       {/* SURPRISE ME CELEBRATION MODAL */}
       {isSurpriseOpen && (
@@ -3324,37 +3274,21 @@ export default function App() {
                   No, Cancel
                 </button>
                 <button
-onClick={async () => {
-  if (deleteTarget === 'all') {
-    setEntries([]);
-    setActiveId('');
-  } else if (deleteTarget === 'entry' && activeEntry) {
-    const targetToDelete = activeEntry;
-    const remaining = entries.filter(e => e.id !== targetToDelete.id);
-    
-    // 1. Odmah ažuriraj ekran
-    setEntries(remaining);
-    if (remaining.length > 0) {
-      setActiveId(remaining[0].id);
-    } else {
-      setActiveId('');
-    }
-
-    // 2. Trajno pošalji naredbu za brisanje direktno na Firebase server!
-    try {
-      await deleteEntryFromFirestore(
-        targetToDelete.id, 
-        targetToDelete.name, 
-        user?.uid, 
-        userProfile?.displayName || user?.displayName || undefined,
-        userProfile?.photoURL || user?.photoURL || undefined
-      );
-    } catch (err) {
-      console.error("Greška pri brisanju sa Firebase-a:", err);
-    }
-  }
-  setDeleteTarget(null);
-}}
+                  onClick={() => {
+                    if (deleteTarget === 'all') {
+                      setEntries([]);
+                      setActiveId('');
+                    } else if (deleteTarget === 'entry' && activeEntry) {
+                      const remaining = entries.filter(e => e.id !== activeEntry.id);
+                      setEntries(remaining);
+                      if (remaining.length > 0) {
+                        setActiveId(remaining[0].id);
+                      } else {
+                        setActiveId('');
+                      }
+                    }
+                    setDeleteTarget(null);
+                  }}
                   className="flex-1 bg-red-550 hover:bg-red-600 text-white font-black py-2 px-4 rounded-xl text-xs transition-colors uppercase cursor-pointer"
                 >
                   Yes, Delete
@@ -3620,11 +3554,8 @@ onClick={async () => {
             console.error("Failed to log out:", err);
           }
         }}
-        recentContributions={recentContributions}
-        isLoadingContributions={isContributionsLoading}
         onUpdateProfile={handleProfileUpdate}
         onSelectUser={handleOpenSocialProfile}
-        onSyncAllToServer={() => syncAllLocalCatalogToFirestore(entries)}
       />
 
       {/* SOCIAL COMMUNITY PROFILE VIEW MODAL */}
@@ -3637,48 +3568,11 @@ onClick={async () => {
           setSelectedSocialProfile(null);
         }}
         isReadOnly={true}
-        recentContributions={socialContributions}
-        isLoadingContributions={isSocialContributionsLoading}
         onSelectUser={handleOpenSocialProfile}
       />
 
-{/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}
-      <VedoPhysicsOverlay
-        isActive={isVedoMode}
-        onCloseRequested={() => setIsVedoMode(false)}
-        onBossDefeated={async () => {
-          localStorage.setItem('has_vedo_trophy', 'true');
-          
-          const newTrophy = {
-            id: 'vedo-slayer',
-            name: 'Kup Pobjede Vedo Dele 🏆',
-            date: new Date().toISOString()
-          };
-
-          if (userProfile) {
-            const updatedTrophies = [...(userProfile.trophies || [])];
-            if (!updatedTrophies.some(t => t.id === 'vedo-slayer')) {
-              updatedTrophies.push(newTrophy);
-            }
-
-            // 1. Ažuriraj lokalno stanje
-            setUserProfile(prev => prev ? {
-              ...prev,
-              trophies: updatedTrophies
-            } : null);
-
-            // 2. Ažuriraj i SPREMI TRAJNO u Firebase bazu za tog korisnika!
-            try {
-              await updateUserProfile(userProfile.uid, {
-                trophies: updatedTrophies
-              });
-              console.log('[Boss Fight] Trofej uspješno sačuvan u Firebase profilu!');
-            } catch (err) {
-              console.error('[Boss Fight] Greška pri spremanju trofeja u Firebase:', err);
-            }
-          }
-        }}
-      />
+      {/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}
+      <VedoPhysicsOverlay isActive={isVedoMode} />
 
       {/* RESET PASSWORD MODAL */}
       {resetOobCode && (
@@ -3762,7 +3656,7 @@ onClick={async () => {
         </div>
       )}
 
-      </div>
+      </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}
     </div>
   );
 }

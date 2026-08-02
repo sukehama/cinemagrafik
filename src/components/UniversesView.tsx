@@ -31,6 +31,7 @@ interface UniversesViewProps {
   onAddNewUniverse: () => void;
   onUpdateUniverse?: (updatedUniverse: RatingEntry) => void;
   onNavigateToEntry?: (entryId: string) => void;
+  onDeleteUniverse?: (universeId: string) => void;
 }
 
 export default function UniversesView({ 
@@ -38,10 +39,12 @@ export default function UniversesView({
   onSelectUniverse, 
   onAddNewUniverse,
   onUpdateUniverse,
-  onNavigateToEntry
+  onNavigateToEntry,
+  onDeleteUniverse
 }: UniversesViewProps) {
   const [selectedUniverseId, setSelectedUniverseId] = useState<string | null>(null);
   const [timelineMode, setTimelineMode] = useState<'chronological' | 'release'>('chronological');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   
   // Item level linking modal state
   const [isLinkingModalOpen, setIsLinkingModalOpen] = useState(false);
@@ -395,9 +398,40 @@ export default function UniversesView({
                           <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
                             {universe.seasons?.length || 0} FAZA
                           </span>
-                          <div className="flex items-center gap-1 text-yellow-400 text-xs font-mono font-black">
-                            <Star size={11} className="fill-current" />
-                            <span>{score > 0 ? score.toFixed(1) : '—'}</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 text-yellow-400 text-xs font-mono font-black">
+                              <Star size={11} className="fill-current" />
+                              <span>{score > 0 ? score.toFixed(1) : '—'}</span>
+                            </div>
+                            {onDeleteUniverse && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirmDeleteId === universe.id) {
+                                    onDeleteUniverse(universe.id);
+                                    setConfirmDeleteId(null);
+                                    if (selectedUniverseId === universe.id) {
+                                      setSelectedUniverseId(null);
+                                    }
+                                  } else {
+                                    setConfirmDeleteId(universe.id);
+                                    setTimeout(() => setConfirmDeleteId(null), 4000);
+                                  }
+                                }}
+                                className={`p-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                                  confirmDeleteId === universe.id
+                                    ? 'bg-red-500 text-white font-bold animate-pulse'
+                                    : 'text-zinc-500 hover:text-red-400 hover:bg-red-500/10'
+                                }`}
+                                title={confirmDeleteId === universe.id ? "Klikni ponovo za brisanje!" : "Obriši univerzum"}
+                              >
+                                <Trash2 size={13} />
+                                {confirmDeleteId === universe.id && (
+                                  <span className="text-[9px] uppercase tracking-wider font-extrabold">Potvrdi?</span>
+                                )}
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -408,16 +442,6 @@ export default function UniversesView({
                         <p className="text-[10px] text-zinc-400 line-clamp-1">
                           {universe.year} • {itemCount} Naslova/Projektā
                         </p>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedUniverseId(universe.id);
-                          }}
-                          className="pt-1 text-[10px] font-bold text-yellow-400 hover:text-yellow-300 flex items-center gap-1 cursor-pointer"
-                        >
-                          Otvoriti Detalje i Grafik <ChevronRight size={12} />
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -438,13 +462,43 @@ export default function UniversesView({
                 />
                 
                 <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-6">
-                  <div>
-                    <span className="text-[10px] font-mono font-black text-purple-400 uppercase tracking-widest bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-full">
-                      Aktivni Univerzum • {activeUniverse.year}
-                    </span>
-                    <h3 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-2">
-                      {activeUniverse.name}
-                    </h3>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+                    <div>
+                      <span className="text-[10px] font-mono font-black text-purple-400 uppercase tracking-widest bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-full">
+                        Aktivni Univerzum • {activeUniverse.year}
+                      </span>
+                      <div className="flex items-center gap-3 mt-2">
+                        <h3 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                          {activeUniverse.name}
+                        </h3>
+                        {onDeleteUniverse && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirmDeleteId === activeUniverse.id) {
+                                onDeleteUniverse(activeUniverse.id);
+                                setConfirmDeleteId(null);
+                                setSelectedUniverseId(null);
+                              } else {
+                                setConfirmDeleteId(activeUniverse.id);
+                                setTimeout(() => setConfirmDeleteId(null), 4000);
+                              }
+                            }}
+                            className={`p-2 rounded-xl border transition cursor-pointer flex items-center gap-1.5 text-xs font-bold ${
+                              confirmDeleteId === activeUniverse.id
+                                ? 'bg-red-600 text-white border-red-500 shadow-lg shadow-red-500/30 animate-pulse'
+                                : 'text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border-zinc-800 hover:border-red-500/30'
+                            }`}
+                            title={confirmDeleteId === activeUniverse.id ? "Klikni ponovo za potvrdu brisanja!" : "Obriši univerzum"}
+                          >
+                            <Trash2 size={14} />
+                            <span>
+                              {confirmDeleteId === activeUniverse.id ? "Potvrdi brisanje?" : "Obriši Univerzum"}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Mode switcher: Hronologija (Lista Stavki) vs Hronološki Slijed (Timeline sa strijelicama) */}
