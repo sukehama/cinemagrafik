@@ -30,7 +30,7 @@ interface UniversesViewProps {
   onSelectUniverse: (universeId: string) => void;
   onAddNewUniverse: () => void;
   onUpdateUniverse?: (updatedUniverse: RatingEntry) => void;
-  onNavigateToEntry?: (entryId: string) => void;
+  onNavigateToEntry?: (entryId: string, seasonNum?: number, episodeNum?: number) => void;
   onDeleteUniverse?: (universeId: string) => void;
 }
 
@@ -65,9 +65,127 @@ export default function UniversesView({
   const [customItemOverview, setCustomItemOverview] = useState('');
   const [customItemRating, setCustomItemRating] = useState(8.0);
 
+  // Dedicated adding item to phase state modal
+  const [addingToPhaseIndex, setAddingToPhaseIndex] = useState<number | null>(null);
+  const [addItemSource, setAddItemSource] = useState<'catalog' | 'custom'>('catalog');
+  const [addItemCatalogType, setAddItemCatalogType] = useState<'movie' | 'show'>('movie');
+  const [addItemMovieId, setAddItemMovieId] = useState<string>('');
+  const [addItemShowId, setAddItemShowId] = useState<string>('');
+  const [addItemSeasonNum, setAddItemSeasonNum] = useState<number>(1);
+  const [addItemEpisodeNum, setAddItemEpisodeNum] = useState<number>(1);
+
+  const [addItemCustomName, setAddItemCustomName] = useState<string>('');
+  const [addItemCustomOverview, setAddItemCustomOverview] = useState<string>('');
+  const [addItemCustomRating, setAddItemCustomRating] = useState<number>(8.0);
+  const [addItemCustomImage, setAddItemCustomImage] = useState<string>('');
+
+  const MAX_UNIVERSE_ITEMS = 100;
+
   const universeEntries = entries.filter(e => e.type === 'universe');
   const availableMoviesAndShows = entries.filter(e => e.type !== 'universe');
   const activeUniverse = universeEntries.find(u => u.id === selectedUniverseId) || universeEntries[0] || null;
+
+  const handleConfirmAddItemToPhase = () => {
+    if (!activeUniverse || !onUpdateUniverse || addingToPhaseIndex === null) return;
+    const currentSeasons = activeUniverse.seasons || [];
+    const targetSeason = currentSeasons[addingToPhaseIndex];
+    if (!targetSeason) return;
+
+    // Strict check for maximum 100 items limit
+    const currentTotalItems = currentSeasons.reduce((acc, s) => acc + (s.episodes?.length || 0), 0);
+    if (currentTotalItems >= MAX_UNIVERSE_ITEMS) {
+      alert(`Maksimalan broj stavki u univerzumu je ${MAX_UNIVERSE_ITEMS}! Ne možete dodati više stavki.`);
+      return;
+    }
+
+    let newItemName = '';
+    let newItemOverview = '';
+    let newItemRating = 8.0;
+    let newItemImage = '';
+    let newItemLinkTargetId = '';
+
+    if (addItemSource === 'catalog') {
+      if (addItemCatalogType === 'movie') {
+        const movie = entries.find(e => e.id === addItemMovieId && e.type === 'movie');
+        if (!movie) return alert('Molimo odaberite film iz kataloga!');
+        newItemName = movie.name;
+        newItemOverview = movie.description || `Film (${movie.year})`;
+        newItemRating = movie.movieRating || 8.0;
+        newItemImage = movie.posterUrl || movie.bannerUrl || '';
+        newItemLinkTargetId = movie.id;
+      } else {
+        const show = entries.find(e => e.id === addItemShowId && e.type === 'show');
+        if (!show) return alert('Molimo odaberite seriju iz kataloga!');
+        const s = show.seasons?.find(sn => sn.seasonNumber === addItemSeasonNum);
+        const ep = s?.episodes?.find(e => e.episodeNumber === addItemEpisodeNum);
+        if (ep) {
+          newItemName = `${show.name} - E${ep.episodeNumber}: ${ep.name}`;
+          newItemOverview = ep.overview || show.description || `Epizoda ${ep.episodeNumber} serije ${show.name}`;
+          newItemRating = ep.rating || 8.0;
+          newItemImage = ep.imageUrl || show.posterUrl || show.bannerUrl || '';
+          newItemLinkTargetId = `${show.id}|${addItemSeasonNum}|${addItemEpisodeNum}`;
+        } else {
+          newItemName = show.name;
+          newItemOverview = show.description || `Serija (${show.year})`;
+          newItemRating = calculateAverageRating(show) || 8.0;
+          newItemImage = show.posterUrl || show.bannerUrl || '';
+          newItemLinkTargetId = show.id;
+        }
+      }
+    } else {
+      if (!addItemCustomName.trim()) return alert('Molimo unesite naziv stavke!');
+      newItemName = addItemCustomName.trim();
+      newItemOverview = addItemCustomOverview.trim();
+      newItemRating = Number(addItemCustomRating) || 8.0;
+      newItemImage = addItemCustomImage.trim();
+    }
+
+    const nextEpNum = targetSeason.episodes.length + 1;
+    const newEpisode: Episode = {
+      id: `${activeUniverse.id}-p${targetSeason.seasonNumber}-ep${Date.now()}`,
+      episodeNumber: nextEpNum,
+      name: newItemName,
+      rating: newItemRating,
+      overview: newItemOverview || undefined,
+      imageUrl: newItemImage || undefined,
+      linkTargetId: newItemLinkTargetId || undefined,
+      linkText: newItemName
+    };
+
+    const updatedSeasons = currentSeasons.map((s, idx) => {
+      if (idx === addingToPhaseIndex) {
+        return {
+          ...s,
+          episodes: [...s.episodes, newEpisode]
+        };
+      }
+      return s;
+    });
+
+    onUpdateUniverse({
+      ...activeUniverse,
+      seasons: updatedSeasons
+    });
+
+    // Reset state & close modal
+    setAddingToPhaseIndex(null);
+    setAddItemCustomName('');
+    setAddItemCustomOverview('');
+    setAddItemCustomRating(8.0);
+    setAddItemCustomImage('');
+    setAddItemMovieId('');
+    setAddItemShowId('');
+  };
+
+  const handleNavigateTarget = (targetId?: string) => {
+    if (!onNavigateToEntry || !targetId) return;
+    if (targetId.includes('|')) {
+      const [entryId, sNum, eNum] = targetId.split('|');
+      onNavigateToEntry(entryId, Number(sNum), Number(eNum));
+    } else {
+      onNavigateToEntry(targetId);
+    }
+  };
 
   // Calculate statistics for active universe
   const activeStats = React.useMemo(() => {
@@ -532,7 +650,9 @@ export default function UniversesView({
 
                     <div className="bg-zinc-950/70 border border-zinc-850 p-3 rounded-xl text-center space-y-0.5">
                       <span className="text-[9px] uppercase font-bold text-zinc-400">Naslova u Priči</span>
-                      <p className="text-base sm:text-lg font-mono font-black text-purple-300">{activeStats.totalItems}</p>
+                      <p className={`text-base sm:text-lg font-mono font-black ${activeStats.totalItems >= 100 ? 'text-red-400' : 'text-purple-300'}`}>
+                        {activeStats.totalItems} / 100
+                      </p>
                     </div>
 
                     <div className="bg-zinc-950/70 border border-zinc-850 p-3 rounded-xl text-center space-y-0.5">
@@ -613,8 +733,23 @@ export default function UniversesView({
                             </span>
 
                             {onUpdateUniverse && (
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-2">
                                 <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (activeStats && activeStats.totalItems >= MAX_UNIVERSE_ITEMS) {
+                                      alert(`Maksimalan broj stavki u univerzumu je ${MAX_UNIVERSE_ITEMS}! Ne možete dodati više stavki.`);
+                                      return;
+                                    }
+                                    setAddingToPhaseIndex(pIdx);
+                                  }}
+                                  className="px-2.5 py-1 bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 rounded-lg text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                                  title="Dodaj novu stavku u ovu fazu"
+                                >
+                                  <Plus size={11} /> Dodaj Stavku
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => handleDeletePhase(pIdx)}
                                   className="p-1 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
                                   title="Obriši ovu fazu"
@@ -666,7 +801,7 @@ export default function UniversesView({
                                       src={item.imageUrl} 
                                       alt={item.name} 
                                       className="w-8 h-10 object-cover rounded bg-zinc-950 shrink-0 border border-zinc-800 cursor-pointer"
-                                      onClick={() => item.linkTargetId && onNavigateToEntry && onNavigateToEntry(item.linkTargetId)}
+                                      onClick={() => handleNavigateTarget(item.linkTargetId)}
                                       referrerPolicy="no-referrer"
                                     />
                                   )}
@@ -674,7 +809,7 @@ export default function UniversesView({
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
                                       <h5 
-                                        onClick={() => item.linkTargetId && onNavigateToEntry && onNavigateToEntry(item.linkTargetId)}
+                                        onClick={() => handleNavigateTarget(item.linkTargetId)}
                                         className={`text-xs font-black truncate transition-colors ${
                                           item.linkTargetId ? 'text-white hover:text-purple-300 cursor-pointer underline underline-offset-2 decoration-purple-500/40' : 'text-zinc-200'
                                         }`}
@@ -683,7 +818,7 @@ export default function UniversesView({
                                       </h5>
                                       {item.linkTargetId && (
                                         <button
-                                          onClick={() => onNavigateToEntry && onNavigateToEntry(item.linkTargetId!)}
+                                          onClick={() => handleNavigateTarget(item.linkTargetId)}
                                           className="text-[9px] text-sky-400 bg-sky-950/60 px-1.5 py-0.2 rounded border border-sky-800/50 hover:bg-sky-900 transition flex items-center gap-1 shrink-0"
                                           title="Otvoriti u katalogu"
                                         >
@@ -736,6 +871,22 @@ export default function UniversesView({
                               </div>
                             ))}
                           </div>
+                        )}
+
+                        {onUpdateUniverse && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (activeStats && activeStats.totalItems >= MAX_UNIVERSE_ITEMS) {
+                                alert(`Maksimalan broj stavki u univerzumu je ${MAX_UNIVERSE_ITEMS}! Ne možete dodati više stavki.`);
+                                return;
+                              }
+                              setAddingToPhaseIndex(pIdx);
+                            }}
+                            className="w-full py-2 border border-dashed border-zinc-800 hover:border-purple-500/50 bg-zinc-900/30 hover:bg-zinc-900/80 rounded-xl text-zinc-400 hover:text-purple-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
+                          >
+                            <Plus size={13} /> Dodaj novu stavku u {phase.seasonName || `Fazu ${phase.seasonNumber}`}
+                          </button>
                         )}
                       </div>
                     ))}
@@ -805,7 +956,7 @@ export default function UniversesView({
 
                                   {step.item.linkTargetId && (
                                     <button
-                                      onClick={() => onNavigateToEntry && onNavigateToEntry(step.item.linkTargetId!)}
+                                      onClick={() => handleNavigateTarget(step.item.linkTargetId)}
                                       className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/40 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer"
                                     >
                                       Pogledaj <ChevronRight size={12} />
@@ -1039,6 +1190,212 @@ export default function UniversesView({
                 </button>
               </div>
             </motion.div>
+          </div>
+        )}
+        {/* DEDICATED MODAL TO ADD ITEM TO A SPECIFIC PHASE */}
+        {addingToPhaseIndex !== null && activeUniverse && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+            <div className="bg-zinc-950 border border-purple-500/40 w-full max-w-lg rounded-2xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-zinc-850 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400">
+                    <Plus size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-white uppercase tracking-wider">
+                      Dodaj Stavku u Fazu #{addingToPhaseIndex + 1}
+                    </h3>
+                    <p className="text-[10px] text-zinc-400">
+                      {activeUniverse.seasons?.[addingToPhaseIndex]?.seasonName || `Faza ${addingToPhaseIndex + 1}`} • Max 100 stavki
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAddingToPhaseIndex(null)}
+                  className="p-1 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Source Mode Toggle */}
+              <div className="grid grid-cols-2 gap-2 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setAddItemSource('catalog')}
+                  className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    addItemSource === 'catalog' ? 'bg-purple-600 text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  🍿 Iz Kataloga
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddItemSource('custom')}
+                  className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    addItemSource === 'custom' ? 'bg-purple-600 text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  ✏️ Prilagođeno
+                </button>
+              </div>
+
+              {addItemSource === 'catalog' ? (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAddItemCatalogType('movie')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                        addItemCatalogType === 'movie' ? 'bg-zinc-800 text-yellow-400 border-yellow-500/40' : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      }`}
+                    >
+                      Film
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAddItemCatalogType('show')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                        addItemCatalogType === 'show' ? 'bg-zinc-800 text-yellow-400 border-yellow-500/40' : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      }`}
+                    >
+                      Serija / Epizoda
+                    </button>
+                  </div>
+
+                  {addItemCatalogType === 'movie' ? (
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Odaberi film:</label>
+                      <select
+                        value={addItemMovieId}
+                        onChange={(e) => setAddItemMovieId(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                      >
+                        <option value="">-- Odaberi film --</option>
+                        {entries.filter(e => e.type === 'movie').map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.year}) - ★ {m.movieRating || '8.0'}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Odaberi seriju:</label>
+                        <select
+                          value={addItemShowId}
+                          onChange={(e) => {
+                            const showId = e.target.value;
+                            setAddItemShowId(showId);
+                            const show = entries.find(s => s.id === showId);
+                            if (show?.seasons?.length) {
+                              setAddItemSeasonNum(show.seasons[0].seasonNumber);
+                              if (show.seasons[0].episodes?.length) {
+                                setAddItemEpisodeNum(show.seasons[0].episodes[0].episodeNumber);
+                              }
+                            }
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                        >
+                          <option value="">-- Odaberi seriju --</option>
+                          {entries.filter(e => e.type === 'show').map(s => (
+                            <option key={s.id} value={s.id}>{s.name} ({s.year})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {addItemShowId && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Sezona:</label>
+                            <select
+                              value={addItemSeasonNum}
+                              onChange={(e) => {
+                                const sNum = Number(e.target.value);
+                                setAddItemSeasonNum(sNum);
+                                const show = entries.find(s => s.id === addItemShowId);
+                                const season = show?.seasons?.find(sn => sn.seasonNumber === sNum);
+                                if (season?.episodes?.length) {
+                                  setAddItemEpisodeNum(season.episodes[0].episodeNumber);
+                                }
+                              }}
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white"
+                            >
+                              {entries.find(e => e.id === addItemShowId)?.seasons?.map(s => (
+                                <option key={s.seasonNumber} value={s.seasonNumber}>Sezona {s.seasonNumber}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Epizoda:</label>
+                            <select
+                              value={addItemEpisodeNum}
+                              onChange={(e) => setAddItemEpisodeNum(Number(e.target.value))}
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white"
+                            >
+                              {entries.find(e => e.id === addItemShowId)?.seasons?.find(s => s.seasonNumber === addItemSeasonNum)?.episodes?.map(ep => (
+                                <option key={ep.episodeNumber} value={ep.episodeNumber}>Ep. {ep.episodeNumber}: {ep.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Naziv naslova/projekta *</label>
+                    <input
+                      type="text"
+                      value={addItemCustomName}
+                      onChange={(e) => setAddItemCustomName(e.target.value)}
+                      placeholder="npr. Iron Man (2008)"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Ocjena (1.0 - 10.0)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      max="10"
+                      value={addItemCustomRating}
+                      onChange={(e) => setAddItemCustomRating(Number(e.target.value))}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Opis / Napomena</label>
+                    <textarea
+                      value={addItemCustomOverview}
+                      onChange={(e) => setAddItemCustomOverview(e.target.value)}
+                      placeholder="Hronološke napomene u radnji..."
+                      rows={2}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 border-t border-zinc-850 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setAddingToPhaseIndex(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 transition-all cursor-pointer"
+                >
+                  Otkaži
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmAddItemToPhase}
+                  className="px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-purple-600 hover:bg-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)] transition-all cursor-pointer"
+                >
+                  Dodaj u Fazu
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </AnimatePresence>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { RatingEntry, Season, Actor } from '../types';
-import { X, Film, Tv, Save, Upload, Sparkles, UserPlus, Trash2, Users } from 'lucide-react';
+import { X, Film, Tv, Save, Upload, Sparkles, UserPlus, Trash2, Users, Palette, RefreshCw } from 'lucide-react';
 
 interface EditEntryModalProps {
   entry: RatingEntry;
@@ -9,6 +9,21 @@ interface EditEntryModalProps {
   onSave: (updatedEntry: RatingEntry) => void;
   allEntriesAvailable?: RatingEntry[];
 }
+
+const COLOR_PRESETS = [
+  { name: 'Smaragd Zelena', hex: '#10b981' },
+  { name: 'Krvavo Crvena', hex: '#f43f5e' },
+  { name: 'Safir Plava', hex: '#0ea5e9' },
+  { name: 'Zlatni Amber', hex: '#f59e0b' },
+  { name: 'Mistična Ljubičasta', hex: '#8b5cf6' },
+  { name: 'Cyber Cyan', hex: '#06b6d4' },
+  { name: 'Neon Fuchsia', hex: '#d946ef' },
+  { name: 'Vulkanska Narandžasta', hex: '#f97316' },
+  { name: 'Deep Indigo', hex: '#6366f1' },
+  { name: 'Limeta Zelena', hex: '#84cc16' },
+  { name: 'Ružičasti Blush', hex: '#ec4899' },
+  { name: 'Teal Val', hex: '#14b8a6' },
+];
 
 const BANNER_PRESETS = [
   { name: 'Kibernetički Sleek', banner: 'https://images.unsplash.com/photo-1563507644-15a65571c366?w=1000&q=80', poster: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&q=80' },
@@ -23,6 +38,7 @@ export default function EditEntryModal({ entry, onClose, onSave, allEntriesAvail
   const [description, setDescription] = useState(entry.description);
   const [posterUrl, setPosterUrl] = useState(entry.posterUrl);
   const [bannerUrl, setBannerUrl] = useState(entry.bannerUrl);
+  const [customThemeColor, setCustomThemeColor] = useState(entry.customThemeColor || '');
 
   const [seasons, setSeasons] = useState<Season[]>(entry.seasons || []);
 
@@ -106,6 +122,7 @@ export default function EditEntryModal({ entry, onClose, onSave, allEntriesAvail
       description: description.trim(),
       posterUrl: posterUrl || 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=500&q=80',
       bannerUrl: bannerUrl || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1200&q=80',
+      customThemeColor: customThemeColor.trim() || undefined,
     };
 
     if (entry.type === 'movie') {
@@ -225,6 +242,89 @@ export default function EditEntryModal({ entry, onClose, onSave, allEntriesAvail
                   <span className="text-[9px] text-zinc-500 font-mono block">Primijeni</span>
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Custom Theme Color & Atmosphere Gradient */}
+          <div className="border-t border-zinc-800/60 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Palette size={14} className="text-yellow-400" />
+                <span className="text-xs font-bold uppercase text-zinc-300 tracking-wider">
+                  Boja & Atmosferski Gradijent Naslova
+                </span>
+              </div>
+              {customThemeColor && (
+                <button
+                  type="button"
+                  onClick={() => setCustomThemeColor('')}
+                  className="text-[10px] text-zinc-400 hover:text-yellow-400 flex items-center gap-1 font-mono transition cursor-pointer"
+                >
+                  <RefreshCw size={10} /> Resetuj na automatski
+                </button>
+              )}
+            </div>
+
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Prilagodite boju i gradijent koji osvjetljava ekran, pozadinu i kartice kada je ovaj naslov izabran.
+            </p>
+
+            {/* Custom Color Input & Swatch */}
+            <div className="flex items-center gap-3 bg-zinc-950/80 p-3 rounded-xl border border-zinc-800">
+              <div className="relative flex items-center">
+                <input
+                  type="color"
+                  value={customThemeColor || '#3b82f6'}
+                  onChange={(e) => setCustomThemeColor(e.target.value)}
+                  className="w-10 h-10 rounded-xl cursor-pointer bg-transparent border-0 p-0"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] font-mono uppercase text-zinc-400 tracking-wider">
+                  Hexadecimalna Boja
+                </label>
+                <input
+                  type="text"
+                  placeholder="#10b981 (Automatski po nazivu)"
+                  value={customThemeColor}
+                  onChange={(e) => setCustomThemeColor(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-yellow-400"
+                />
+              </div>
+              <div 
+                className="w-10 h-10 rounded-xl border border-white/20 shadow-inner flex items-center justify-center text-xs font-bold shrink-0 transition-colors"
+                style={{ backgroundColor: customThemeColor || '#3b82f6' }}
+                title="Prikaz izabrane boje"
+              >
+                ✨
+              </div>
+            </div>
+
+            {/* Quick Color Swatches */}
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+              {COLOR_PRESETS.map((colorPreset) => {
+                const isSelected = customThemeColor?.toLowerCase() === colorPreset.hex.toLowerCase();
+                return (
+                  <button
+                    key={`color-preset-${colorPreset.hex}`}
+                    type="button"
+                    onClick={() => setCustomThemeColor(colorPreset.hex)}
+                    className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-left transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-zinc-800 border-white text-white shadow-md'
+                        : 'bg-zinc-950/60 border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span 
+                      className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm border border-white/30" 
+                      style={{ backgroundColor: colorPreset.hex }} 
+                    />
+                    <span className="text-[10px] font-bold truncate">
+                      {colorPreset.name}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

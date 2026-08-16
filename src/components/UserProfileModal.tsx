@@ -40,6 +40,7 @@ interface UserProfileModalProps {
   onUpdateProfile?: (updatedData: Partial<UserProfile>) => Promise<void>;
   onSelectUser?: (userId: string) => void;
   onSyncAllToServer?: () => Promise<void>;
+  onOpenPalacinkaBoss?: () => void;
 }
 
 const AVATAR_PRESETS = [
@@ -67,7 +68,8 @@ export default function UserProfileModal({
   onClose,
   onLogout,
   isReadOnly = false,
-  onUpdateProfile
+  onUpdateProfile,
+  onOpenPalacinkaBoss
 }: UserProfileModalProps) {
   
   const [isEditing, setIsEditing] = React.useState(false);
@@ -479,23 +481,54 @@ export default function UserProfileModal({
                     Trofeji i Dostignuća
                   </h4>
 
-                  {(profile.trophies && profile.trophies.length > 0) || localStorage.getItem('vedo_trophy_unlocked') === 'true' ? (
+                  {(profile.trophies && profile.trophies.length > 0) || 
+                   localStorage.getItem('vedo_trophy_unlocked') === 'true' || 
+                   localStorage.getItem('palacinka_trophy_unlocked') === 'true' ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="flex items-center gap-3 bg-gradient-to-r from-yellow-500/10 to-amber-500/5 p-3 rounded-xl border border-yellow-500/30">
-                        <div className="w-10 h-10 rounded-full bg-yellow-400 text-zinc-955 flex items-center justify-center font-black shadow-[0_0_15px_rgba(250,204,21,0.5)] shrink-0">
-                          <Crown size={20} />
+                      {(localStorage.getItem('vedo_trophy_unlocked') === 'true' || profile.trophies?.some((t: any) => typeof t === 'string' ? t === 'vedo_slayer' : t.id === 'vedo_slayer')) && (
+                        <div className="flex items-center gap-3 bg-gradient-to-r from-yellow-500/10 to-amber-500/5 p-3 rounded-xl border border-yellow-500/30">
+                          <div className="w-10 h-10 rounded-full bg-yellow-400 text-zinc-955 flex items-center justify-center font-black shadow-[0_0_15px_rgba(250,204,21,0.5)] shrink-0">
+                            <Crown size={20} />
+                          </div>
+                          <div>
+                            <h5 className="text-xs font-black text-yellow-300 uppercase tracking-wide">Vedo Dela Slayer 🏆</h5>
+                            <p className="text-[10px] text-zinc-400 font-bold">Pobijeđen Vedo Dela Boss u mini-igri!</p>
+                          </div>
                         </div>
-                        <div>
-                          <h5 className="text-xs font-black text-yellow-300 uppercase tracking-wide">Vedo Dela Slayer 🏆</h5>
-                          <p className="text-[10px] text-zinc-400 font-bold">Pobijeđen Vedo Dela Boss u mini-igri!</p>
+                      )}
+
+                      {(localStorage.getItem('palacinka_trophy_unlocked') === 'true' || profile.trophies?.some((t: any) => typeof t === 'string' ? t === 'palacinka_master' : t.id === 'palacinka_master')) && (
+                        <div className="flex items-center gap-3 bg-gradient-to-r from-amber-500/10 to-yellow-500/5 p-3 rounded-xl border border-amber-500/30">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 to-amber-500 text-zinc-955 flex items-center justify-center font-black shadow-[0_0_15px_rgba(245,158,11,0.5)] shrink-0 text-lg">
+                            🥞
+                          </div>
+                          <div>
+                            <h5 className="text-xs font-black text-yellow-300 uppercase tracking-wide">Majstor Palačinki 🏆</h5>
+                            <p className="text-[10px] text-zinc-400 font-bold">Pobijeđen Palačinka Boss i namazano 5 uzoraka!</p>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     <p className="text-xs text-zinc-500 font-mono italic">
-                      Još nemate otključanih trofeja. Pobijedite Vedo Dela Boss-a da otključate prvi trofej!
+                      Još nemate otključanih trofeja. Istražite tajne opcije za otključavanje trofeja!
                     </p>
                   )}
+
+                  {/* SUBTLE LOW-OPACITY SECRET BUTTON */}
+                  <div className="pt-2 border-t border-zinc-900/80 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        if (onOpenPalacinkaBoss) onOpenPalacinkaBoss();
+                      }}
+                      className="px-3 py-1 text-[11px] font-mono text-zinc-500 hover:text-amber-300 opacity-30 hover:opacity-100 transition-all cursor-pointer rounded-lg hover:bg-zinc-900 flex items-center gap-1 tracking-wider"
+                      title="Secret Boss Fight"
+                    >
+                      🥞 palačinka
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

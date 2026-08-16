@@ -27,6 +27,13 @@ export interface GuestReview {
   createdAt?: string;
 }
 
+export interface EpisodeHyperlink {
+  id: string;
+  title: string;
+  targetId?: string; // entryId or entryId|seasonNum|episodeNum
+  url?: string;
+}
+
 export interface Episode {
   id: string;
   episodeNumber: number;
@@ -47,6 +54,7 @@ export interface Episode {
   linkText?: string;
   linkTargetId?: string;
   linkedEntries?: { entryId: string; seasonNum?: number; episodeNum?: number; customTitle?: string }[];
+  hyperlinks?: EpisodeHyperlink[];
 }
 
 export interface Season {
@@ -76,6 +84,10 @@ export interface RatingEntry {
   movieReviews?: GuestReview[]; // Movie reviews
   movieFeaturedMoments?: FeaturedMoment[]; // Movie clips
 
+  // Custom atmosphere styling / color override
+  customThemeColor?: string; // e.g. '#10b981', '#ec4899', '#f59e0b', '#06b6d4', etc.
+  customGradient?: string;   // e.g. 'from-pink-950/50 via-zinc-950 to-purple-950/30'
+
   // Applicable to shows and universes (where "seasons" are categories in universes):
   seasons?: Season[];
   
@@ -94,6 +106,31 @@ export interface TrophyItem {
   description: string;
   icon: string;
   unlockedAt: string;
+}
+
+export interface ProjectItem {
+  id: string;
+  entryId: string;
+  entryName: string;
+  type: 'show' | 'movie' | 'universe' | 'episode';
+  posterUrl?: string;
+  seasonNum?: number;
+  epNum?: number;
+  epName?: string;
+  rating: number;
+  year?: string | number;
+  addedAt?: string;
+}
+
+export interface ProjectFolder {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  createdAt: string;
+  updatedAt: string;
+  items: ProjectItem[];
 }
 
 export interface PendingChangeRequest {

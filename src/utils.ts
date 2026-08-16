@@ -184,128 +184,195 @@ export interface DynamicColorTheme {
   glowShadow: string;
   accentColor: string;
   bgHeader: string;
+  bgAtmosphere: string;
 }
 
-export function getShowDynamicColors(name: string): DynamicColorTheme {
+export function getShowDynamicColors(nameOrEntry?: string | RatingEntry | null, overrideColor?: string): DynamicColorTheme {
+  let name = '';
+  let customColor: string | undefined = overrideColor;
+  let customGrad: string | undefined = undefined;
+
+  if (typeof nameOrEntry === 'object' && nameOrEntry !== null) {
+    name = nameOrEntry.name || '';
+    if (nameOrEntry.customThemeColor) customColor = nameOrEntry.customThemeColor;
+    if (nameOrEntry.customGradient) customGrad = nameOrEntry.customGradient;
+  } else if (typeof nameOrEntry === 'string') {
+    name = nameOrEntry;
+  }
+
+  // If a custom color is specified, dynamically construct a dedicated theme
+  if (customColor) {
+    const hex = customColor;
+    return {
+      name: 'custom',
+      bgGlow: 'from-white/10 via-transparent to-transparent',
+      text: 'text-white',
+      border: 'border-white/30 hover:border-white/60',
+      badge: 'bg-zinc-900/90 text-white border-white/20',
+      button: 'text-zinc-955 font-black shadow-lg',
+      glowShadow: `shadow-[0_0_50px_-10px_${hex}40]`,
+      accentColor: hex,
+      bgHeader: 'from-zinc-950/80',
+      bgAtmosphere: customGrad || `from-[${hex}]/35 via-zinc-950 to-black`
+    };
+  }
+
   const normalized = (name || '').trim().toLowerCase();
-  
-  // Custom hand-crafted visual directions for popular shows
-  if (normalized.includes('breaking') || normalized.includes('better call')) {
-    return {
-      name: 'emerald',
-      bgGlow: 'from-emerald-500/10 via-transparent to-transparent',
-      text: 'text-emerald-400',
-      border: 'border-emerald-500/30 hover:border-emerald-500/60',
-      badge: 'bg-emerald-950/70 text-emerald-400 border-emerald-900/50',
-      button: 'bg-emerald-550 hover:bg-emerald-400 text-zinc-950 shadow-emerald-500/25',
-      glowShadow: 'shadow-[0_0_50px_-12px_rgba(16,185,129,0.25)]',
-      accentColor: '#10b981',
-      bgHeader: 'from-emerald-950/50'
-    };
-  }
-  if (normalized.includes('thrones') || normalized.includes('dragon') || normalized.includes('stranger') || normalized.includes('crown')) {
-    return {
-      name: 'ruby',
-      bgGlow: 'from-red-500/10 via-transparent to-transparent',
-      text: 'text-rose-400',
-      border: 'border-red-500/30 hover:border-red-500/60',
-      badge: 'bg-red-950/70 text-rose-400 border-red-900/50',
-      button: 'bg-red-550 hover:bg-red-400 text-zinc-950 shadow-red-500/25',
-      glowShadow: 'shadow-[0_0_50px_-12px_rgba(239,68,68,0.25)]',
-      accentColor: '#ef4444',
-      bgHeader: 'from-red-955/50'
-    };
-  }
-  if (normalized.includes('interstellar') || normalized.includes('avatar') || normalized.includes('sky') || normalized.includes('cyber') || normalized.includes('matrix')) {
-    return {
-      name: 'sapphire',
-      bgGlow: 'from-sky-500/10 via-transparent to-transparent',
-      text: 'text-sky-400',
-      border: 'border-sky-500/30 hover:border-sky-500/60',
-      badge: 'bg-sky-950/70 text-sky-400 border-sky-900/50',
-      button: 'bg-sky-550 hover:bg-sky-400 text-zinc-950 shadow-sky-500/25',
-      glowShadow: 'shadow-[0_0_50px_-12px_rgba(14,165,233,0.25)]',
-      accentColor: '#0ea5e9',
-      bgHeader: 'from-sky-950/50'
-    };
-  }
-  if (normalized.includes('dark') || normalized.includes('pulp') || normalized.includes('godfather') || normalized.includes('batman')) {
-    return {
-      name: 'amber',
-      bgGlow: 'from-amber-500/10 via-transparent to-transparent',
-      text: 'text-amber-400',
-      border: 'border-amber-500/30 hover:border-amber-500/60',
-      badge: 'bg-amber-955/70 text-amber-400 border-amber-900/50',
-      button: 'bg-amber-400 hover:bg-amber-350 text-zinc-950 shadow-amber-500/25',
-      glowShadow: 'shadow-[0_0_50px_-12px_rgba(245,158,11,0.25)]',
-      accentColor: '#f59e0b',
-      bgHeader: 'from-amber-950/50'
-    };
-  }
 
   // Consistent hashing based on name character sums to yield distinctive dynamic themes
   let hash = 0;
   for (let i = 0; i < (name || '').length; i++) {
     hash = (name || '').charCodeAt(i) + ((hash << 5) - hash);
   }
-  const index = Math.abs(hash) % 5;
-  const palettes = [
+
+  const palettes: DynamicColorTheme[] = [
     {
       name: 'emerald',
-      bgGlow: 'from-emerald-500/10 via-transparent to-transparent',
-      text: 'text-emerald-405',
-      border: 'border-emerald-550/35 hover:border-emerald-500/60',
-      badge: 'bg-emerald-950/70 text-emerald-400 border-emerald-900/50',
+      bgGlow: 'from-emerald-500/20 via-transparent to-transparent',
+      text: 'text-emerald-400',
+      border: 'border-emerald-500/35 hover:border-emerald-500/60',
+      badge: 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60',
       button: 'bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-emerald-500/25',
-      glowShadow: 'shadow-[0_0_50px_-12px_rgba(16,185,129,0.25)]',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(16,185,129,0.35)]',
       accentColor: '#10b981',
-      bgHeader: 'from-emerald-950/50'
+      bgHeader: 'from-emerald-950/70',
+      bgAtmosphere: 'from-emerald-950/50 via-zinc-950 to-teal-950/30'
     },
     {
-      name: 'ruby',
-      bgGlow: 'from-red-500/10 via-transparent to-transparent',
-      text: 'text-red-403',
-      border: 'border-red-500/30 hover:border-red-500/60',
-      badge: 'bg-red-950/70 text-rose-400 border-red-900/50',
-      button: 'bg-red-500 hover:bg-red-400 text-white shadow-red-500/25',
-      glowShadow: 'shadow-[0_0_50px_-12px_rgba(239,68,68,0.25)]',
-      accentColor: '#ef4444',
-      bgHeader: 'from-red-955/50'
+      name: 'crimson',
+      bgGlow: 'from-red-500/20 via-transparent to-transparent',
+      text: 'text-rose-400',
+      border: 'border-red-500/35 hover:border-red-500/60',
+      badge: 'bg-red-950/80 text-rose-400 border-red-800/60',
+      button: 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(244,63,94,0.35)]',
+      accentColor: '#f43f5e',
+      bgHeader: 'from-rose-950/70',
+      bgAtmosphere: 'from-rose-950/50 via-zinc-950 to-red-950/30'
     },
     {
-      name: 'sapphire',
-      bgGlow: 'from-sky-500/10 via-transparent to-transparent',
-      text: 'text-sky-403',
-      border: 'border-sky-500/30 hover:border-sky-500/60',
-      badge: 'bg-sky-950/70 text-sky-400 border-sky-900/50',
-      button: 'bg-sky-500 hover:bg-sky-405 text-zinc-950 shadow-sky-500/25',
-      glowShadow: 'shadow-[0_0_50px_-12px_rgba(14,165,233,0.25)]',
+      name: 'electric-sapphire',
+      bgGlow: 'from-sky-500/20 via-transparent to-transparent',
+      text: 'text-sky-400',
+      border: 'border-sky-500/35 hover:border-sky-500/60',
+      badge: 'bg-sky-950/80 text-sky-400 border-sky-800/60',
+      button: 'bg-sky-500 hover:bg-sky-400 text-zinc-950 shadow-sky-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(14,165,233,0.35)]',
       accentColor: '#0ea5e9',
-      bgHeader: 'from-sky-950/50'
+      bgHeader: 'from-sky-950/70',
+      bgAtmosphere: 'from-sky-950/50 via-zinc-950 to-blue-950/30'
     },
     {
-      name: 'amber',
-      bgGlow: 'from-amber-400/10 via-transparent to-transparent',
-      text: 'text-amber-403',
-      border: 'border-amber-500/30 hover:border-amber-500/60',
-      badge: 'bg-amber-955/70 text-amber-400 border-amber-900/50',
-      button: 'bg-amber-400 hover:bg-amber-350 text-zinc-950 shadow-amber-500/25',
-      glowShadow: 'shadow-[0_0_50px_-12px_rgba(245,158,11,0.25)]',
+      name: 'royal-amber',
+      bgGlow: 'from-amber-400/20 via-transparent to-transparent',
+      text: 'text-amber-400',
+      border: 'border-amber-500/35 hover:border-amber-500/60',
+      badge: 'bg-amber-950/80 text-amber-400 border-amber-800/60',
+      button: 'bg-amber-400 hover:bg-amber-300 text-zinc-950 shadow-amber-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(245,158,11,0.35)]',
       accentColor: '#f59e0b',
-      bgHeader: 'from-amber-950/50'
+      bgHeader: 'from-amber-950/70',
+      bgAtmosphere: 'from-amber-950/50 via-zinc-950 to-orange-950/30'
     },
     {
-      name: 'amethyst',
-      bgGlow: 'from-violet-500/10 via-transparent to-transparent',
+      name: 'mystic-amethyst',
+      bgGlow: 'from-violet-500/20 via-transparent to-transparent',
       text: 'text-violet-400',
-      border: 'border-violet-500/30 hover:border-violet-500/60',
-      badge: 'bg-violet-950/70 text-violet-400 border-violet-900/50',
+      border: 'border-violet-500/35 hover:border-violet-500/60',
+      badge: 'bg-violet-950/80 text-violet-400 border-violet-800/60',
       button: 'bg-violet-500 hover:bg-violet-400 text-white shadow-violet-500/25',
-      glowShadow: 'shadow-[0_0_50px_-12px_rgba(139,92,246,0.25)]',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(139,92,246,0.35)]',
       accentColor: '#8b5cf6',
-      bgHeader: 'from-violet-950/50'
+      bgHeader: 'from-violet-950/70',
+      bgAtmosphere: 'from-violet-950/50 via-zinc-950 to-purple-950/30'
+    },
+    {
+      name: 'cyber-cyan',
+      bgGlow: 'from-cyan-500/20 via-transparent to-transparent',
+      text: 'text-cyan-400',
+      border: 'border-cyan-500/35 hover:border-cyan-500/60',
+      badge: 'bg-cyan-950/80 text-cyan-400 border-cyan-800/60',
+      button: 'bg-cyan-500 hover:bg-cyan-400 text-zinc-950 shadow-cyan-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(6,182,212,0.35)]',
+      accentColor: '#06b6d4',
+      bgHeader: 'from-cyan-950/70',
+      bgAtmosphere: 'from-cyan-950/50 via-zinc-950 to-teal-950/30'
+    },
+    {
+      name: 'neon-fuchsia',
+      bgGlow: 'from-fuchsia-500/20 via-transparent to-transparent',
+      text: 'text-fuchsia-400',
+      border: 'border-fuchsia-500/35 hover:border-fuchsia-500/60',
+      badge: 'bg-fuchsia-950/80 text-fuchsia-400 border-fuchsia-800/60',
+      button: 'bg-fuchsia-500 hover:bg-fuchsia-400 text-white shadow-fuchsia-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(217,70,239,0.35)]',
+      accentColor: '#d946ef',
+      bgHeader: 'from-fuchsia-950/70',
+      bgAtmosphere: 'from-fuchsia-950/50 via-zinc-950 to-pink-950/30'
+    },
+    {
+      name: 'volcanic-orange',
+      bgGlow: 'from-orange-500/20 via-transparent to-transparent',
+      text: 'text-orange-400',
+      border: 'border-orange-500/35 hover:border-orange-500/60',
+      badge: 'bg-orange-950/80 text-orange-400 border-orange-800/60',
+      button: 'bg-orange-500 hover:bg-orange-400 text-zinc-950 shadow-orange-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(249,115,22,0.35)]',
+      accentColor: '#f97316',
+      bgHeader: 'from-orange-950/70',
+      bgAtmosphere: 'from-orange-950/50 via-zinc-950 to-amber-950/30'
+    },
+    {
+      name: 'deep-indigo',
+      bgGlow: 'from-indigo-500/20 via-transparent to-transparent',
+      text: 'text-indigo-400',
+      border: 'border-indigo-500/35 hover:border-indigo-500/60',
+      badge: 'bg-indigo-950/80 text-indigo-400 border-indigo-800/60',
+      button: 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(99,102,241,0.35)]',
+      accentColor: '#6366f1',
+      bgHeader: 'from-indigo-950/70',
+      bgAtmosphere: 'from-indigo-950/50 via-zinc-950 to-slate-950/30'
+    },
+    {
+      name: 'lime-spark',
+      bgGlow: 'from-lime-500/20 via-transparent to-transparent',
+      text: 'text-lime-400',
+      border: 'border-lime-500/35 hover:border-lime-500/60',
+      badge: 'bg-lime-950/80 text-lime-400 border-lime-800/60',
+      button: 'bg-lime-500 hover:bg-lime-400 text-zinc-950 shadow-lime-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(132,204,22,0.35)]',
+      accentColor: '#84cc16',
+      bgHeader: 'from-lime-950/70',
+      bgAtmosphere: 'from-lime-950/50 via-zinc-950 to-emerald-950/30'
+    },
+    {
+      name: 'pink-blush',
+      bgGlow: 'from-pink-500/20 via-transparent to-transparent',
+      text: 'text-pink-400',
+      border: 'border-pink-500/35 hover:border-pink-500/60',
+      badge: 'bg-pink-950/80 text-pink-400 border-pink-800/60',
+      button: 'bg-pink-500 hover:bg-pink-400 text-white shadow-pink-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(236,72,153,0.35)]',
+      accentColor: '#ec4899',
+      bgHeader: 'from-pink-950/70',
+      bgAtmosphere: 'from-pink-950/50 via-zinc-950 to-rose-950/30'
+    },
+    {
+      name: 'teal-wave',
+      bgGlow: 'from-teal-500/20 via-transparent to-transparent',
+      text: 'text-teal-400',
+      border: 'border-teal-500/35 hover:border-teal-500/60',
+      badge: 'bg-teal-950/80 text-teal-400 border-teal-800/60',
+      button: 'bg-teal-500 hover:bg-teal-400 text-zinc-950 shadow-teal-500/25',
+      glowShadow: 'shadow-[0_0_50px_-12px_rgba(20,184,166,0.35)]',
+      accentColor: '#14b8a6',
+      bgHeader: 'from-teal-950/70',
+      bgAtmosphere: 'from-teal-950/50 via-zinc-950 to-cyan-950/30'
     }
   ];
+
+  const index = Math.abs(hash) % palettes.length;
   return palettes[index];
 }
 
@@ -320,97 +387,58 @@ export interface ThemeAtmosphere {
 export function getEntryAtmosphere(entry?: RatingEntry | null, activeTab: string = 'home'): ThemeAtmosphere {
   if (activeTab === 'univerzumi') {
     return {
-      gradientCss: 'from-purple-950/30 via-zinc-950 to-indigo-955/20',
-      accentGlowColor: 'rgba(147, 51, 234, 0.08)',
-      primaryGlowColor: 'rgba(79, 70, 229, 0.05)',
+      gradientCss: 'from-purple-950/35 via-zinc-950 to-indigo-955/25',
+      accentGlowColor: '#a855f7',
+      primaryGlowColor: 'rgba(168, 85, 247, 0.12)',
       badgeBorder: 'border-purple-500/30 text-purple-300 bg-purple-500/10',
       posterBgUrl: entry?.bannerUrl || entry?.posterUrl
     };
   }
 
-  if (activeTab === 'glumci') {
+  if (activeTab === 'glumci' || activeTab === 'baza') {
     return {
-      gradientCss: 'from-emerald-950/20 via-zinc-950 to-teal-955/15',
-      accentGlowColor: 'rgba(16, 185, 129, 0.07)',
-      primaryGlowColor: 'rgba(20, 184, 166, 0.05)',
+      gradientCss: 'from-emerald-950/30 via-zinc-950 to-teal-955/20',
+      accentGlowColor: '#10b981',
+      primaryGlowColor: 'rgba(16, 185, 129, 0.12)',
       badgeBorder: 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10',
     };
   }
 
   if (activeTab === 'leaderboard') {
     return {
-      gradientCss: 'from-amber-950/20 via-zinc-950 to-yellow-955/15',
-      accentGlowColor: 'rgba(245, 158, 11, 0.08)',
-      primaryGlowColor: 'rgba(234, 179, 8, 0.05)',
+      gradientCss: 'from-amber-950/30 via-zinc-950 to-yellow-955/20',
+      accentGlowColor: '#eab308',
+      primaryGlowColor: 'rgba(234, 179, 8, 0.12)',
       badgeBorder: 'border-amber-500/30 text-amber-300 bg-amber-500/10',
+    };
+  }
+
+  if (activeTab === 'chat') {
+    return {
+      gradientCss: 'from-cyan-950/30 via-zinc-950 to-blue-955/20',
+      accentGlowColor: '#06b6d4',
+      primaryGlowColor: 'rgba(6, 182, 212, 0.12)',
+      badgeBorder: 'border-cyan-500/30 text-cyan-300 bg-cyan-500/10',
     };
   }
 
   if (!entry) {
     return {
-      gradientCss: 'from-amber-950/15 via-zinc-950 to-purple-955/10',
-      accentGlowColor: 'rgba(250, 204, 21, 0.06)',
-      primaryGlowColor: 'rgba(168, 85, 247, 0.05)',
-      badgeBorder: 'border-yellow-400/30 text-yellow-300 bg-yellow-400/10',
+      gradientCss: 'from-blue-950/40 via-zinc-950 to-indigo-950/25',
+      accentGlowColor: '#3b82f6',
+      primaryGlowColor: 'rgba(59, 130, 246, 0.15)',
+      badgeBorder: 'border-blue-400/30 text-blue-300 bg-blue-400/10',
     };
   }
 
-  const nameLower = entry.name.toLowerCase();
-
-  if (nameLower.includes('breaking bad') || nameLower.includes('better call saul')) {
-    return {
-      gradientCss: 'from-emerald-950/25 via-zinc-950 to-teal-955/15',
-      accentGlowColor: 'rgba(16, 185, 129, 0.09)',
-      primaryGlowColor: 'rgba(5, 150, 105, 0.06)',
-      badgeBorder: 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10',
-      posterBgUrl: entry.bannerUrl || entry.posterUrl
-    };
-  }
-
-  if (nameLower.includes('game of thrones') || nameLower.includes('house of the dragon')) {
-    return {
-      gradientCss: 'from-red-950/25 via-zinc-950 to-amber-955/15',
-      accentGlowColor: 'rgba(225, 29, 72, 0.09)',
-      primaryGlowColor: 'rgba(217, 119, 6, 0.06)',
-      badgeBorder: 'border-red-500/30 text-red-300 bg-red-500/10',
-      posterBgUrl: entry.bannerUrl || entry.posterUrl
-    };
-  }
-
-  if (nameLower.includes('marvel') || nameLower.includes('avengers') || nameLower.includes('star wars')) {
-    return {
-      gradientCss: 'from-purple-950/25 via-zinc-950 to-sky-955/15',
-      accentGlowColor: 'rgba(147, 51, 234, 0.09)',
-      primaryGlowColor: 'rgba(14, 165, 233, 0.06)',
-      badgeBorder: 'border-purple-500/30 text-purple-300 bg-purple-500/10',
-      posterBgUrl: entry.bannerUrl || entry.posterUrl
-    };
-  }
-
-  if (nameLower.includes('batman') || nameLower.includes('dark knight')) {
-    return {
-      gradientCss: 'from-slate-950 via-zinc-950 to-blue-955/20',
-      accentGlowColor: 'rgba(30, 58, 138, 0.12)',
-      primaryGlowColor: 'rgba(59, 130, 246, 0.06)',
-      badgeBorder: 'border-blue-500/30 text-blue-300 bg-blue-500/10',
-      posterBgUrl: entry.bannerUrl || entry.posterUrl
-    };
-  }
-
-  // Dynamic deterministic hashing for movie/show entry
-  let hash = 0;
-  const str = (entry.name + entry.id + (entry.type || '')).toLowerCase();
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue1 = Math.abs(hash % 360);
-  const hue2 = (hue1 + 40) % 360;
+  // Generate dynamic bespoke theme for this specific entry (every show/movie has unique gradient or custom theme!)
+  const dynamicTheme = getShowDynamicColors(entry);
 
   return {
-    gradientCss: `from-[hsl(${hue1},30%,6%)] via-zinc-950 to-[hsl(${hue2},25%,5%)]`,
-    accentGlowColor: `hsla(${hue1}, 60%, 35%, 0.08)`,
-    primaryGlowColor: `hsla(${hue2}, 55%, 30%, 0.05)`,
-    badgeBorder: `border-[hsl(${hue1},60%,50%)]/30 text-[hsl(${hue1},70%,70%)] bg-[hsl(${hue1},60%,50%)]/10`,
+    gradientCss: dynamicTheme.bgAtmosphere,
+    accentGlowColor: dynamicTheme.accentColor,
+    primaryGlowColor: `${dynamicTheme.accentColor}30`,
+    badgeBorder: dynamicTheme.badge,
     posterBgUrl: entry.bannerUrl || entry.posterUrl
   };
 }

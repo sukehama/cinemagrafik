@@ -15,12 +15,15 @@ import ExportModal from './components/ExportModal';
 import SurpriseMeModal from './components/SurpriseMeModal';
 import BulkEditModal from './components/BulkEditModal';
 import ActorsView from './components/ActorsView';
+import BazaView from './components/BazaView';
 import LeaderboardView from './components/LeaderboardView';
 import UserProfileModal from './components/UserProfileModal';
 import UniversesView from './components/UniversesView';
 import CinematicIntro from './components/CinematicIntro';
 import ChatView from './components/ChatView';
 import VedoPhysicsOverlay, { VEDO_IMAGE_SRC } from './components/VedoPhysicsOverlay';
+import PalacinkaBossModal from './components/PalacinkaBossModal';
+import GithubUpdateBanner from './components/GithubUpdateBanner';
 import { SkeletonGrid, SkeletonFilmCard, SkeletonHeroBanner } from './components/SkeletonLoader';
 
 // Firebase imports
@@ -75,7 +78,8 @@ import {
   Layers,
   SlidersHorizontal,
   MoreVertical,
-  MessageSquare
+  MessageSquare,
+  FolderKanban
 } from 'lucide-react';
 
 export default function App() {
@@ -87,6 +91,9 @@ export default function App() {
   // Vedo Dela Easter Egg Mode state (Triggered by 6 clicks on top-left logo within 10s)
   const [isVedoMode, setIsVedoMode] = useState<boolean>(false);
   const [logoClicks, setLogoClicks] = useState<number[]>([]);
+
+  // Palacinka Boss Fight Easter Egg state
+  const [isPalacinkaBossActive, setIsPalacinkaBossActive] = useState<boolean>(false);
 
   const handleLogoClick = () => {
     const now = Date.now();
@@ -467,12 +474,35 @@ export default function App() {
 
   const activeTheme = useMemo(() => {
     if (!activeEntry) return null;
-    return getShowDynamicColors(activeEntry.name);
+    return getShowDynamicColors(activeEntry);
   }, [activeEntry]);
 
   const atmosphere = useMemo(() => {
+    if (activeTab === 'home') {
+      return {
+        gradientCss: 'from-blue-950/40 via-zinc-950 to-indigo-950/25',
+        accentGlowColor: '#3b82f6',
+        primaryGlowColor: 'rgba(59, 130, 246, 0.15)',
+        badgeBorder: 'border-blue-400/30 text-blue-300 bg-blue-400/10',
+      };
+    }
     return getEntryAtmosphere(activeEntry, activeTab);
   }, [activeEntry, activeTab]);
+
+  // Dynamic ambient glow color changing for every tab and every series/movie
+  const currentAmbientColor = useMemo(() => {
+    if (activeTab === 'home') return '#3b82f6'; // Classic Blue default for Home
+    if (activeTab === 'univerzumi') return '#a855f7'; // Purple / Violet
+    if (activeTab === 'glumci') return '#10b981';    // Emerald / Teal
+    if (activeTab === 'leaderboard') return '#eab308';// Crown Gold
+    if (activeTab === 'chat') return '#06b6d4';       // Cyan / Sky
+    
+    // For 'katalog' tab: when a show is selected, use that specific show's custom/random gradient color
+    if (activeEntry && activeTheme?.accentColor) {
+      return activeTheme.accentColor;
+    }
+    return '#3b82f6'; // Classic Blue default for catalog
+  }, [activeTab, activeEntry, activeTheme]);
 
   // Find the highest rated entry in the database
   const highestRatedEntry = useMemo(() => {
@@ -783,6 +813,14 @@ export default function App() {
   const handleAddEpisodeToSeason = (seasonNumber: number) => {
     if (!activeEntry || !activeEntry.seasons) return;
 
+    if (activeEntry.type === 'universe') {
+      const currentTotal = activeEntry.seasons.reduce((acc, s) => acc + s.episodes.length, 0);
+      if (currentTotal >= 100) {
+        alert('Maksimalan broj stavki u univerzumu je 100!');
+        return;
+      }
+    }
+
     setEntries(prev => prev.map(e => {
       if (e.id === activeEntry.id) {
         const seasons = e.seasons || [];
@@ -815,6 +853,16 @@ export default function App() {
   const handleSetSeasonEpisodeCount = (seasonNumber: number, targetCount: number) => {
     if (!activeEntry || !activeEntry.seasons) return;
     const cleanCount = Math.max(1, targetCount);
+
+    if (activeEntry.type === 'universe') {
+      const currentTotalOtherSeasons = activeEntry.seasons
+        .filter(s => s.seasonNumber !== seasonNumber)
+        .reduce((acc, s) => acc + s.episodes.length, 0);
+      if (currentTotalOtherSeasons + cleanCount > 100) {
+        alert(`Maksimalan ukupan broj stavki u univerzumu je 100. Možete postaviti najviše ${100 - currentTotalOtherSeasons} stavki za ovu fazu.`);
+        return;
+      }
+    }
 
     setEntries(prev => prev.map(e => {
       if (e.id === activeEntry.id) {
@@ -1395,13 +1443,39 @@ export default function App() {
         }} 
       />
 
-      {/* SUBTLE DARK NEUTRAL GRADIENTS FOR MAXIMUM TOP CONTRAST AND CINEMATIC LUXURY */}
-      <div className="fixed inset-0 pointer-events-none z-0 bg-gradient-to-b from-zinc-950 via-zinc-950/90 to-zinc-950" />
-      <div className="fixed inset-0 pointer-events-none z-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900/40 via-zinc-950/80 to-zinc-950" />
+      {/* DYNAMIC TOP & FULL BACKGROUND GRADIENT BASED ON ACTIVE SHOW / TAB */}
+      <div 
+        className={`fixed inset-0 pointer-events-none z-0 bg-gradient-to-b ${atmosphere.gradientCss} opacity-75 transition-all duration-700 ease-out`} 
+      />
+      <div 
+        className="fixed inset-0 pointer-events-none z-0 transition-all duration-700"
+        style={{
+          background: `radial-gradient(ellipse at top, ${currentAmbientColor}40 0%, transparent 65%)`
+        }}
+      />
+      <div className="fixed inset-0 pointer-events-none z-0 bg-gradient-to-t from-zinc-950 via-zinc-950/70 to-transparent" />
+
+      {/* ATMOSPHERIC GRADIENT THEME GLOW COMING UP FROM BOTTOM OF THE SCREEN */}
+      <div 
+        className="fixed bottom-0 left-0 right-0 h-80 sm:h-[480px] pointer-events-none z-0 transition-all duration-700 ease-out"
+        style={{
+          background: `linear-gradient(to top, ${currentAmbientColor}40 0%, ${currentAmbientColor}12 40%, transparent 100%)`,
+          filter: 'blur(32px)'
+        }}
+      />
+      <div 
+        className="fixed bottom-0 left-0 right-0 h-40 sm:h-64 pointer-events-none z-0 opacity-80 transition-all duration-700"
+        style={{
+          background: `radial-gradient(ellipse at bottom, ${currentAmbientColor}55 0%, transparent 75%)`,
+        }}
+      />
 
       {/* MAIN CONTAINER */}
       <div className="relative z-10 flex flex-col min-h-screen">
         
+        {/* GITHUB UPDATE DETECTION BANNER */}
+        <GithubUpdateBanner repoOwner="sukehama" repoName="cinemagrafik" />
+
         {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
         <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3.5 backdrop-blur-3xl bg-zinc-950/85 shadow-[0_10px_40px_rgba(0,0,0,0.8)] transition-all">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -1497,7 +1571,7 @@ export default function App() {
                 { id: 'home', label: 'Meni', icon: Home },
                 { id: 'katalog', label: 'Katalog', icon: Film },
                 { id: 'univerzumi', label: 'Univerzumi', icon: Layers, badge: entries.filter(e => e.type === 'universe').length },
-                { id: 'glumci', label: 'Glumci', icon: Users },
+                { id: 'glumci', label: 'Baza', icon: FolderKanban },
                 { id: 'leaderboard', label: 'Rang Liste', icon: Trophy },
                 { id: 'chat', label: 'Chat & Memes', icon: MessageSquare },
               ].map((tab) => {
@@ -1681,6 +1755,27 @@ export default function App() {
                           <div>
                             <div className="font-bold">Ponovi Uvodnu Animaciju</div>
                             <div className="text-[9px] text-zinc-400 font-normal">Cinema Grafik uvod</div>
+                          </div>
+                        </button>
+
+                        {/* Check GitHub Updates */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            try {
+                              localStorage.removeItem('cinemagrafik_dismissed_update_sha');
+                            } catch {}
+                            window.location.reload();
+                          }}
+                          id="btn-check-github-updates"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-blue-300 hover:bg-blue-500/15 transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
+                            <RefreshCw size={14} />
+                          </div>
+                          <div>
+                            <div className="font-bold">GitHub Ažuriranja</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">sukehama/cinemagrafik repozitorij</div>
                           </div>
                         </button>
 
@@ -2267,9 +2362,15 @@ export default function App() {
                   onUpdateUniverse={(updatedUniverse) => {
                     setEntries(prev => prev.map(e => e.id === updatedUniverse.id ? updatedUniverse : e));
                   }}
-                  onNavigateToEntry={(entryId) => {
-                    handleSelectEntry(entryId);
-                    setActiveTab('katalog');
+                  onNavigateToEntry={(targetId, seasonNum, epNum) => {
+                    if (seasonNum !== undefined && epNum !== undefined) {
+                      handleNavigateFromActorCatalog(targetId, seasonNum, epNum);
+                    } else if (targetId.includes('|')) {
+                      const [eId, sNum, eNum] = targetId.split('|');
+                      handleNavigateFromActorCatalog(eId, Number(sNum), Number(eNum));
+                    } else {
+                      handleNavigateFromActorCatalog(targetId);
+                    }
                   }}
                   onDeleteUniverse={(universeId) => {
                     setEntries(prev => prev.filter(e => e.id !== universeId));
@@ -2278,13 +2379,13 @@ export default function App() {
               </motion.div>
             ) : activeTab === 'glumci' ? (
               <motion.div
-                key="tab-glumci"
+                key="tab-baza"
                 initial={{ opacity: 0, x: -16 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 16 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
-                <ActorsView
+                <BazaView
                   entries={entries}
                   allActorsWithAppearances={allActorsWithAppearances}
                   selectedActorName={selectedActorName}
@@ -3556,6 +3657,7 @@ export default function App() {
         }}
         onUpdateProfile={handleProfileUpdate}
         onSelectUser={handleOpenSocialProfile}
+        onOpenPalacinkaBoss={() => setIsPalacinkaBossActive(true)}
       />
 
       {/* SOCIAL COMMUNITY PROFILE VIEW MODAL */}
@@ -3569,6 +3671,21 @@ export default function App() {
         }}
         isReadOnly={true}
         onSelectUser={handleOpenSocialProfile}
+        onOpenPalacinkaBoss={() => setIsPalacinkaBossActive(true)}
+      />
+
+      {/* PALACINKA BOSS FIGHT EASTER EGG OVERLAY */}
+      <PalacinkaBossModal 
+        isActive={isPalacinkaBossActive} 
+        onClose={() => setIsPalacinkaBossActive(false)}
+        onBossDefeated={() => {
+          if (userProfile && user) {
+            const currentTrophies = userProfile.trophies || [];
+            if (!currentTrophies.includes('palacinka_master')) {
+              handleProfileUpdate({ trophies: [...currentTrophies, 'palacinka_master'] });
+            }
+          }
+        }}
       />
 
       {/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}

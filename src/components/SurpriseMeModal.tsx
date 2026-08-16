@@ -10,7 +10,7 @@ interface SurpriseMeModalProps {
 }
 
 export default function SurpriseMeModal({ entries, onClose, onNavigateToEntry }: SurpriseMeModalProps) {
-  const [selectedFormat, setSelectedFormat] = useState<'all' | 'show' | 'movie' | 'universe'>('all');
+  const [selectedFormat, setSelectedFormat] = useState<'all' | 'show' | 'movie'>('all');
   const [selectedEntryId, setSelectedEntryId] = useState<string>('all');
   const [selectedActors, setSelectedActors] = useState<string[]>([]);
   const [surpriseResult, setSurpriseResult] = useState<{
@@ -21,10 +21,11 @@ export default function SurpriseMeModal({ entries, onClose, onNavigateToEntry }:
   const [showCelebration, setShowCelebration] = useState(false);
   const [noCandidatesError, setNoCandidatesError] = useState(false);
 
-  // Scan entire library to extract all unique actors
+  // Scan entire library to extract all unique actors (excluding universe entries)
   const availableActors = useMemo(() => {
     const actorNames = new Set<string>();
     entries.forEach(entry => {
+      if (entry.type === 'universe') return;
       if (entry.movieActors) {
         entry.movieActors.forEach(act => {
           if (act.name) actorNames.add(act.name.trim());
@@ -45,9 +46,10 @@ export default function SurpriseMeModal({ entries, onClose, onNavigateToEntry }:
     return Array.from(actorNames).sort();
   }, [entries]);
 
-  // Filter entry dropdown based on selected format
+  // Filter entry dropdown based on selected format (strictly excluding universes)
   const filteredEntryDropdownList = useMemo(() => {
     return entries.filter(e => {
+      if (e.type === 'universe') return false;
       if (selectedFormat === 'all') return true;
       return e.type === selectedFormat;
     });
@@ -78,6 +80,9 @@ export default function SurpriseMeModal({ entries, onClose, onNavigateToEntry }:
     }[] = [];
 
     entries.forEach(e => {
+      // Strictly exclude universe entries from Surprise Me
+      if (e.type === 'universe') return;
+
       // 1. Format filter
       if (selectedFormat !== 'all' && e.type !== selectedFormat) return;
       
@@ -94,8 +99,8 @@ export default function SurpriseMeModal({ entries, onClose, onNavigateToEntry }:
         }
         
         candidates.push({ entry: e });
-      } else if (e.type === 'show' || e.type === 'universe') {
-        // Scan episodes/items inside seasons
+      } else if (e.type === 'show') {
+        // Scan episodes inside seasons for series
         (e.seasons || []).forEach(s => {
           (s.episodes || []).forEach(ep => {
             if (selectedActors.length > 0) {
@@ -183,12 +188,11 @@ export default function SurpriseMeModal({ entries, onClose, onNavigateToEntry }:
               {/* Type Category Filter */}
               <div className="space-y-2">
                 <span className="text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider block">1. Šta želiš gledati? (Format)</span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-zinc-950 p-1 rounded-xl border border-zinc-850">
+                <div className="grid grid-cols-3 gap-2 bg-zinc-950 p-1 rounded-xl border border-zinc-850">
                   {[
                     { key: 'all', label: 'Bilo šta', icon: Sparkles },
                     { key: 'movie', label: 'Filmovi', icon: Film },
                     { key: 'show', label: 'Serije', icon: Tv },
-                    { key: 'universe', label: 'Univerzumi', icon: Trophy },
                   ].map(f => {
                     const Icon = f.icon;
                     const active = selectedFormat === f.key;

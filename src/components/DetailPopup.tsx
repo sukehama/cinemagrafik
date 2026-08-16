@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Episode, Actor, GuestReview, RatingEntry, FeaturedMoment } from '../types';
+import { Episode, Actor, GuestReview, RatingEntry, FeaturedMoment, EpisodeHyperlink } from '../types';
 import { getYoutubeEmbedUrl, getRatingColorClass } from '../utils';
 import { X, Youtube, Save, Trash2, Edit2, Play, Star, Upload, Plus, Users, MessageSquare, Film, Tv, ChevronRight, ChevronLeft, Check, Video, Clock } from 'lucide-react';
 
@@ -25,6 +25,20 @@ const BRIEF_AVATAR_PRESETS = [
   { name: 'Bloger', url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop' },
 ];
 
+const getInitialHyperlinks = (ep: Episode): EpisodeHyperlink[] => {
+  if (ep.hyperlinks && ep.hyperlinks.length > 0) {
+    return ep.hyperlinks;
+  }
+  if (ep.linkText || ep.linkTargetId) {
+    return [{
+      id: 'legacy-1',
+      title: ep.linkText || 'Poveznica',
+      targetId: ep.linkTargetId
+    }];
+  }
+  return [];
+};
+
 export default function DetailPopup({
   episode,
   seasonNumber,
@@ -48,9 +62,33 @@ export default function DetailPopup({
   const [showTrailer, setShowTrailer] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Custom hyperlink state
+  // Custom hyperlink state (Multiple hyperlinks per episode)
+  const [hyperlinks, setHyperlinks] = useState<EpisodeHyperlink[]>(() => getInitialHyperlinks(episode));
   const [linkText, setLinkText] = useState(episode.linkText || '');
   const [linkTargetId, setLinkTargetId] = useState(episode.linkTargetId || '');
+
+  const handleAddHyperlink = () => {
+    setHyperlinks(prev => [
+      ...prev,
+      {
+        id: `link-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        title: '',
+        targetId: ''
+      }
+    ]);
+  };
+
+  const handleUpdateHyperlink = (index: number, field: keyof EpisodeHyperlink, value: string) => {
+    setHyperlinks(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const handleRemoveHyperlink = (index: number) => {
+    setHyperlinks(prev => prev.filter((_, i) => i !== index));
+  };
 
   // Lists state
   const [guestReviews, setGuestReviews] = useState<GuestReview[]>(episode.guestReviews || []);
@@ -360,6 +398,7 @@ export default function DetailPopup({
     setGuestReviews(episode.guestReviews || []);
     setActors(episode.actors || []);
     setFeaturedMoments(episode.featuredMoments || []);
+    setHyperlinks(getInitialHyperlinks(episode));
     setLinkText(episode.linkText || '');
     setLinkTargetId(episode.linkTargetId || '');
     setIsEditing(false);
@@ -372,6 +411,9 @@ export default function DetailPopup({
   }, [episode]);
 
   const handleSave = () => {
+    const validHyperlinks = hyperlinks.filter(h => h.title.trim() || h.targetId || h.url);
+    const firstLink = validHyperlinks[0];
+
     onSave({
       ...episode,
       name,
@@ -384,8 +426,9 @@ export default function DetailPopup({
       guestReviews,
       actors,
       featuredMoments,
-      linkText: linkText || undefined,
-      linkTargetId: linkTargetId || undefined
+      hyperlinks: validHyperlinks,
+      linkText: firstLink?.title || linkText || undefined,
+      linkTargetId: firstLink?.targetId || linkTargetId || undefined
     });
     setIsEditing(false);
   };
@@ -950,55 +993,91 @@ export default function DetailPopup({
                 />
               </div>
 
-              {/* Hyperlink target configs */}
+              {/* Hyperlink target configs (Multiple hyperlinks per episode) */}
               <div className="border-t border-zinc-805 pt-3 space-y-3">
-                <span className="block text-xs font-bold text-zinc-400 uppercase tracking-wide">
-                  Povezana alternativna verzija / Hyperlink (Opcionalno)
-                </span>
-                <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-850 grid grid-cols-1 gap-3">
-                  <div>
-                    <label className="block text-[9px] text-zinc-500 font-extrabold uppercase mb-1">Prikazani tekst (npr. Has 1 Alternative Cut)</label>
-                    <input
-                      type="text"
-                      value={linkText}
-                      onChange={(e) => setLinkText(e.target.value)}
-                      placeholder="npr. Has 1 Alternative Cut ili Pogledaj povezani univerzum"
-                      className="w-full bg-zinc-900 border border-zinc-805 rounded px-2.5 py-1.5 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-yellow-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] text-zinc-500 font-extrabold uppercase mb-1">Odredište poveznice / Hyperlink target</label>
-                    <select
-                      value={linkTargetId}
-                      onChange={(e) => setLinkTargetId(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-805 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none"
-                    >
-                      <option value="">-- Bez poveznice --</option>
-                      {allEntriesAvailable.map(item => {
-                        if (item.type === 'movie') {
-                          return (
-                            <option key={`lnk-t-${item.id}`} value={item.id}>
-                              🎬 [Film] {item.name}
-                            </option>
-                          );
-                        } else {
-                          return (item.seasons || []).flatMap(s => 
-                            (s.episodes || []).map(ep => {
-                              const composite = `${item.id}|${s.seasonNumber}|${ep.episodeNumber}`;
-                              const typ = item.type === 'universe' ? 'Univerzum' : 'Serija';
-                              const label = item.type === 'universe' ? (s.seasonName || `Faza ${s.seasonNumber}`) : `Sezona ${s.seasonNumber}`;
-                              return (
-                                <option key={`lnk-t-${composite}`} value={composite}>
-                                  📺 [{typ}] {item.name} - {label}, E{ep.episodeNumber}: {ep.name}
-                                </option>
-                              );
-                            })
-                          );
-                        }
-                      })}
-                    </select>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="block text-xs font-bold text-zinc-400 uppercase tracking-wide flex items-center gap-1.5">
+                    🔗 Povezane verzije i Hyperlinkovi ({hyperlinks.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddHyperlink}
+                    className="text-[10px] font-black uppercase tracking-wider bg-yellow-400 hover:bg-yellow-300 text-zinc-955 px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus size={12} /> Dodaj Poveznicu
+                  </button>
                 </div>
+
+                {hyperlinks.length === 0 ? (
+                  <p className="text-[11px] text-zinc-500 italic px-1">
+                    Nema dodanih hyperlinkova za ovu epizodu. Kliknite "+ Dodaj Poveznicu" da povežete drugu epizodu ili film.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {hyperlinks.map((link, idx) => (
+                      <div key={link.id || idx} className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-850 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-yellow-400 font-extrabold uppercase font-mono tracking-wider flex items-center gap-1">
+                            ✨ Poveznica #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveHyperlink(idx)}
+                            className="text-zinc-500 hover:text-red-400 text-xs transition p-1 cursor-pointer"
+                            title="Ukloni hiperlink"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[9px] text-zinc-500 font-extrabold uppercase mb-1">Prikazani tekst</label>
+                            <input
+                              type="text"
+                              value={link.title}
+                              onChange={(e) => handleUpdateHyperlink(idx, 'title', e.target.value)}
+                              placeholder="npr. Director's Cut ili Pogledaj povezanost"
+                              className="w-full bg-zinc-900 border border-zinc-805 rounded px-2.5 py-1.5 text-zinc-100 placeholder-zinc-700 text-xs focus:outline-none focus:border-yellow-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-zinc-500 font-extrabold uppercase mb-1">Odredište poveznice</label>
+                            <select
+                              value={link.targetId || ''}
+                              onChange={(e) => handleUpdateHyperlink(idx, 'targetId', e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-805 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-yellow-400"
+                            >
+                              <option value="">-- Odaberi iz kataloga --</option>
+                              {allEntriesAvailable.map(item => {
+                                if (item.type === 'movie') {
+                                  return (
+                                    <option key={`lnk-t-${item.id}-${idx}`} value={item.id}>
+                                      🎬 [Film] {item.name}
+                                    </option>
+                                  );
+                                } else {
+                                  return (item.seasons || []).flatMap(s => 
+                                    (s.episodes || []).map(ep => {
+                                      const composite = `${item.id}|${s.seasonNumber}|${ep.episodeNumber}`;
+                                      const typ = item.type === 'universe' ? 'Univerzum' : 'Serija';
+                                      const label = item.type === 'universe' ? (s.seasonName || `Faza ${s.seasonNumber}`) : `Sezona ${s.seasonNumber}`;
+                                      return (
+                                        <option key={`lnk-t-${composite}-${idx}`} value={composite}>
+                                          📺 [{typ}] {item.name} - {label}, E{ep.episodeNumber}: {ep.name}
+                                        </option>
+                                      );
+                                    })
+                                  );
+                                }
+                              })}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* FEATURED MOMENTS (ISTAKNUTI MOMENTI) EDIT MODULE */}
@@ -1201,30 +1280,52 @@ export default function DetailPopup({
                   </div>
                 </div>
               )}
-              {/* Hyperlinked Alternative Cut info */}
-              {episode.linkText && (
-                <div className="bg-yellow-500/10 hover:bg-yellow-500/15 border border-yellow-500/25 p-3 rounded-xl flex items-center justify-between gap-3 animate-fade-in">
-                  <span className="text-yellow-405 font-sans font-bold text-xs">
-                    ✨ {episode.linkText}
-                  </span>
-                  {onNavigateToEntry && episode.linkTargetId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (episode.linkTargetId!.includes('|')) {
-                          const [ent, s, e] = episode.linkTargetId!.split('|');
-                          onNavigateToEntry(ent, Number(s), Number(e));
-                        } else {
-                          onNavigateToEntry(episode.linkTargetId!);
-                        }
-                      }}
-                      className="text-[9px] font-black uppercase tracking-wider bg-yellow-400 hover:bg-yellow-300 text-zinc-950 px-3 py-1.5 rounded-lg transition-all active:scale-95 duration-200 cursor-pointer"
-                    >
-                      Prikaži →
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* Hyperlinked Alternative Cut / Multiple Hyperlinks info */}
+              {(() => {
+                const displayLinks: EpisodeHyperlink[] = (episode.hyperlinks && episode.hyperlinks.length > 0)
+                  ? episode.hyperlinks
+                  : (episode.linkText || episode.linkTargetId)
+                    ? [{ id: 'legacy-display', title: episode.linkText || 'Povezani sadržaj', targetId: episode.linkTargetId }]
+                    : [];
+
+                if (displayLinks.length === 0) return null;
+
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-yellow-400 font-extrabold uppercase tracking-wider">
+                        ✨ POVEZANI SADRŽAJ & HYPERLINKOVI ({displayLinks.length})
+                      </span>
+                      <div className="h-px flex-1 bg-yellow-500/20" />
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {displayLinks.map((lnk, lIdx) => (
+                        <div key={lnk.id || lIdx} className="bg-yellow-500/10 hover:bg-yellow-500/15 border border-yellow-500/25 p-3 rounded-xl flex items-center justify-between gap-3 animate-fade-in">
+                          <span className="text-yellow-300 font-sans font-extrabold text-xs flex items-center gap-2">
+                            <span className="text-yellow-400">🔗</span> {lnk.title || 'Povezani sadržaj'}
+                          </span>
+                          {onNavigateToEntry && lnk.targetId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (lnk.targetId!.includes('|')) {
+                                  const [ent, s, e] = lnk.targetId!.split('|');
+                                  onNavigateToEntry(ent, Number(s), Number(e));
+                                } else {
+                                  onNavigateToEntry(lnk.targetId!);
+                                }
+                              }}
+                              className="text-[9px] font-black uppercase tracking-wider bg-yellow-400 hover:bg-yellow-300 text-zinc-955 px-3 py-1.5 rounded-lg transition-all active:scale-95 duration-200 cursor-pointer shrink-0"
+                            >
+                              Prikaži →
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Synopsis Segment - Fluid Netflix Style */}
               <div className="bg-zinc-900/40 p-4.5 rounded-2xl border border-zinc-800/40 space-y-2">
