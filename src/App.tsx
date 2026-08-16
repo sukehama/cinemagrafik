@@ -23,7 +23,7 @@ import CinematicIntro from './components/CinematicIntro';
 import ChatView from './components/ChatView';
 import VedoPhysicsOverlay, { VEDO_IMAGE_SRC } from './components/VedoPhysicsOverlay';
 import PalacinkaBossModal from './components/PalacinkaBossModal';
-import GithubUpdateBanner from './components/GithubUpdateBanner';
+import GithubUpdateBanner, { triggerManualUpdateCheck } from './components/GithubUpdateBanner';
 import { SkeletonGrid, SkeletonFilmCard, SkeletonHeroBanner } from './components/SkeletonLoader';
 
 // Firebase imports
@@ -217,6 +217,7 @@ export default function App() {
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showSyncPrompt, setShowSyncPrompt] = useState(false);
+  const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null);
 
   // In-app password reset states
   const [resetOobCode, setResetOobCode] = useState<string | null>(null);
@@ -1474,7 +1475,11 @@ export default function App() {
       <div className="relative z-10 flex flex-col min-h-screen">
         
         {/* GITHUB UPDATE DETECTION BANNER */}
-        <GithubUpdateBanner repoOwner="sukehama" repoName="cinemagrafik" />
+        <GithubUpdateBanner 
+          repoOwner="sukehama" 
+          repoName="cinemagrafik" 
+          onUpdateFound={(has, ver) => setAvailableUpdateVersion(has ? ver : null)}
+        />
 
         {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
         <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3.5 backdrop-blur-3xl bg-zinc-950/85 shadow-[0_10px_40px_rgba(0,0,0,0.8)] transition-all">
@@ -1634,7 +1639,7 @@ export default function App() {
                 <button
                   onClick={() => setIsToolsOpen(!isToolsOpen)}
                   id="btn-tools-dropdown"
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all duration-200 cursor-pointer relative ${
                     isToolsOpen
                       ? 'bg-zinc-800 text-white border-yellow-400/50 shadow-[0_0_15px_rgba(250,204,21,0.15)]'
                       : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white'
@@ -1643,6 +1648,9 @@ export default function App() {
                 >
                   <SlidersHorizontal size={15} className="text-yellow-400" />
                   <span className="hidden sm:inline">Alati</span>
+                  {availableUpdateVersion && (
+                    <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)] animate-pulse" />
+                  )}
                   <ChevronDown size={14} className={`transform transition-transform duration-200 ${isToolsOpen ? 'rotate-180 text-yellow-400' : 'text-zinc-500'}`} />
                 </button>
 
@@ -1762,10 +1770,9 @@ export default function App() {
                         <button
                           onClick={() => {
                             setIsToolsOpen(false);
-                            try {
-                              localStorage.removeItem('cinemagrafik_dismissed_update_sha');
-                            } catch {}
-                            window.location.reload();
+                            triggerManualUpdateCheck();
+                            setToastMessage('Provjera ažuriranja na sukehama/cinemagrafik...');
+                            setTimeout(() => setToastMessage(null), 3000);
                           }}
                           id="btn-check-github-updates"
                           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-blue-300 hover:bg-blue-500/15 transition-all text-left cursor-pointer group"
@@ -1774,7 +1781,14 @@ export default function App() {
                             <RefreshCw size={14} />
                           </div>
                           <div>
-                            <div className="font-bold">GitHub Ažuriranja</div>
+                            <div className="font-bold flex items-center gap-1.5">
+                              <span>GitHub Ažuriranja</span>
+                              {availableUpdateVersion && (
+                                <span className="px-1.5 py-0.2 text-[9px] bg-blue-500 text-white rounded font-mono">
+                                  {availableUpdateVersion}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[9px] text-zinc-400 font-normal">sukehama/cinemagrafik repozitorij</div>
                           </div>
                         </button>
