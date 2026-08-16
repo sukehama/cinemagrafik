@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RatingEntry, Season, Episode } from '../types';
 import { calculateAverageRating } from '../utils';
@@ -13,6 +13,8 @@ import {
   Layers, 
   ListOrdered, 
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Info,
   ArrowRight,
@@ -22,7 +24,14 @@ import {
   ArrowUp,
   ArrowDown,
   Check,
-  X
+  X,
+  Search,
+  SlidersHorizontal,
+  LayoutGrid,
+  List,
+  Eye,
+  FoldVertical,
+  UnfoldVertical
 } from 'lucide-react';
 
 interface UniversesViewProps {
@@ -46,6 +55,12 @@ export default function UniversesView({
   const [timelineMode, setTimelineMode] = useState<'chronological' | 'release'>('chronological');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   
+  // Search & Filter state for universe items
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPhaseFilter, setSelectedPhaseFilter] = useState<'all' | number>('all');
+  const [viewDensity, setViewDensity] = useState<'compact' | 'detailed'>('compact');
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set());
+
   // Item level linking modal state
   const [isLinkingModalOpen, setIsLinkingModalOpen] = useState(false);
   const [targetItemCoords, setTargetItemCoords] = useState<{ phaseIdx: number; itemIdx: number } | null>(null);
@@ -59,12 +74,6 @@ export default function UniversesView({
   const [isAddingPhase, setIsAddingPhase] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState('');
   
-  // Custom item input state
-  const [isAddingCustomItem, setIsAddingCustomItem] = useState(false);
-  const [customItemName, setCustomItemName] = useState('');
-  const [customItemOverview, setCustomItemOverview] = useState('');
-  const [customItemRating, setCustomItemRating] = useState(8.0);
-
   // Dedicated adding item to phase state modal
   const [addingToPhaseIndex, setAddingToPhaseIndex] = useState<number | null>(null);
   const [addItemSource, setAddItemSource] = useState<'catalog' | 'custom'>('catalog');
@@ -79,11 +88,33 @@ export default function UniversesView({
   const [addItemCustomRating, setAddItemCustomRating] = useState<number>(8.0);
   const [addItemCustomImage, setAddItemCustomImage] = useState<string>('');
 
-  const MAX_UNIVERSE_ITEMS = 100;
+  const MAX_ITEMS_PER_PHASE = 50;
 
-  const universeEntries = entries.filter(e => e.type === 'universe');
-  const availableMoviesAndShows = entries.filter(e => e.type !== 'universe');
+  const universeEntries = useMemo(() => entries.filter(e => e.type === 'universe'), [entries]);
   const activeUniverse = universeEntries.find(u => u.id === selectedUniverseId) || universeEntries[0] || null;
+
+  // Toggle single phase collapse
+  const togglePhaseCollapse = (seasonNumber: number) => {
+    setCollapsedPhases(prev => {
+      const next = new Set(prev);
+      if (next.has(seasonNumber)) {
+        next.delete(seasonNumber);
+      } else {
+        next.add(seasonNumber);
+      }
+      return next;
+    });
+  };
+
+  // Collapse or expand all
+  const toggleCollapseAll = () => {
+    if (!activeUniverse?.seasons) return;
+    if (collapsedPhases.size === activeUniverse.seasons.length) {
+      setCollapsedPhases(new Set());
+    } else {
+      setCollapsedPhases(new Set(activeUniverse.seasons.map(s => s.seasonNumber)));
+    }
+  };
 
   const handleConfirmAddItemToPhase = () => {
     if (!activeUniverse || !onUpdateUniverse || addingToPhaseIndex === null) return;
@@ -91,10 +122,9 @@ export default function UniversesView({
     const targetSeason = currentSeasons[addingToPhaseIndex];
     if (!targetSeason) return;
 
-    // Strict check for maximum 100 items limit
-    const currentTotalItems = currentSeasons.reduce((acc, s) => acc + (s.episodes?.length || 0), 0);
-    if (currentTotalItems >= MAX_UNIVERSE_ITEMS) {
-      alert(`Maksimalan broj stavki u univerzumu je ${MAX_UNIVERSE_ITEMS}! Ne možete dodati više stavki.`);
+    // Check for maximum 50 items limit per phase
+    if (targetSeason.episodes.length >= MAX_ITEMS_PER_PHASE) {
+      alert(`Maksimalan broj stavki po fazi je ${MAX_ITEMS_PER_PHASE}! Ova faza je već popunjena.`);
       return;
     }
 
@@ -188,7 +218,7 @@ export default function UniversesView({
   };
 
   // Calculate statistics for active universe
-  const activeStats = React.useMemo(() => {
+  const activeStats = useMemo(() => {
     if (!activeUniverse) return null;
     let totalItems = 0;
     let ratedItemsCount = 0;
@@ -210,31 +240,42 @@ export default function UniversesView({
     };
   }, [activeUniverse]);
 
-  // Flatten chronological timeline items across phases for the arrow timeline
-  const chronologicalTimelineItems = React.useMemo(() => {
+  // Flatten chronological timeline items across phases for the arrow timeline with search and phase filter
+  const chronologicalTimelineItems = useMemo(() => {
     if (!activeUniverse || !activeUniverse.seasons) return [];
     const items: {
       phaseName: string;
       phaseNumber: number;
+      phaseIndex: number;
       item: Episode;
       index: number;
     }[] = [];
 
     let count = 0;
     activeUniverse.seasons.forEach((phase, pIdx) => {
+      if (selectedPhaseFilter !== 'all' && phase.seasonNumber !== selectedPhaseFilter) {
+        return;
+      }
       phase.episodes.forEach((ep) => {
         count++;
-        items.push({
-          phaseName: phase.seasonName || `Faza ${phase.seasonNumber}`,
-          phaseNumber: phase.seasonNumber,
-          item: ep,
-          index: count
-        });
+        const matchesQuery = !searchQuery.trim() || 
+          ep.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (ep.overview && ep.overview.toLowerCase().includes(searchQuery.toLowerCase()));
+
+        if (matchesQuery) {
+          items.push({
+            phaseName: phase.seasonName || `Faza ${phase.seasonNumber}`,
+            phaseNumber: phase.seasonNumber,
+            phaseIndex: pIdx,
+            item: ep,
+            index: count
+          });
+        }
       });
     });
 
     return items;
-  }, [activeUniverse]);
+  }, [activeUniverse, selectedPhaseFilter, searchQuery]);
 
   // Handler to add a new phase stack
   const handleAddPhase = () => {
@@ -345,43 +386,6 @@ export default function UniversesView({
     setTargetItemCoords(null);
   };
 
-  // Handler to add custom item to phase
-  const handleAddCustomItem = (phaseIndex: number) => {
-    if (!activeUniverse || !onUpdateUniverse || !customItemName.trim()) return;
-    const currentSeasons = activeUniverse.seasons || [];
-    const targetSeason = currentSeasons[phaseIndex];
-    if (!targetSeason) return;
-
-    const nextEpNum = targetSeason.episodes.length + 1;
-    const newEpItem: Episode = {
-      id: `${activeUniverse.id}-p${targetSeason.seasonNumber}-custom${Date.now()}`,
-      episodeNumber: nextEpNum,
-      name: customItemName.trim(),
-      rating: Number(customItemRating) || 8.0,
-      overview: customItemOverview.trim() || undefined
-    };
-
-    const updatedSeasons = currentSeasons.map((s, idx) => {
-      if (idx === phaseIndex) {
-        return {
-          ...s,
-          episodes: [...s.episodes, newEpItem]
-        };
-      }
-      return s;
-    });
-
-    onUpdateUniverse({
-      ...activeUniverse,
-      seasons: updatedSeasons
-    });
-
-    setCustomItemName('');
-    setCustomItemOverview('');
-    setCustomItemRating(8.0);
-    setIsAddingCustomItem(false);
-  };
-
   // Handler to delete item from phase
   const handleDeleteItemFromPhase = (phaseIndex: number, itemIndex: number) => {
     if (!activeUniverse || !onUpdateUniverse) return;
@@ -444,7 +448,7 @@ export default function UniversesView({
               Cinematic Univerzumi & Hronološke Franšize
             </h2>
             <p className="text-zinc-300 text-xs sm:text-sm leading-relaxed">
-              Spajajte više povezanih filmova, serija i faza u jednu kohezivnu hronologiju. Uređujte stacke, povezujte postojeće naslove iz kataloga i pratite vizualni timeline sa strijelicama!
+              Spajajte više povezanih filmova, serija i faza u kohezivnu hronologiju do 50 stavki po fazi. Uređujte stackove, povezujte postojeće naslove i pratite hronologiju priče.
             </p>
           </div>
 
@@ -496,7 +500,11 @@ export default function UniversesView({
                 return (
                   <div
                     key={`universe-card-${universe.id}`}
-                    onClick={() => setSelectedUniverseId(universe.id)}
+                    onClick={() => {
+                      setSelectedUniverseId(universe.id);
+                      setSelectedPhaseFilter('all');
+                      setSearchQuery('');
+                    }}
                     className={`group relative p-4 rounded-2xl border backdrop-blur-md cursor-pointer transition-all duration-200 ${
                       isSelected
                         ? 'bg-purple-950/40 border-purple-500/60 shadow-[0_0_20px_rgba(168,85,247,0.15)] -translate-y-0.5'
@@ -505,7 +513,7 @@ export default function UniversesView({
                   >
                     <div className="flex gap-4 items-center">
                       <img
-                        src={universe.posterUrl}
+                        src={universe.posterUrl || universe.bannerUrl}
                         alt={universe.name}
                         className="w-16 h-22 object-cover rounded-xl bg-zinc-950 shrink-0 border border-zinc-800/80 group-hover:border-purple-500/50 transition-colors"
                         referrerPolicy="no-referrer"
@@ -572,14 +580,14 @@ export default function UniversesView({
           {activeUniverse && (
             <div className="lg:col-span-8 space-y-6">
               {/* Universe Banner Card */}
-              <div className="relative rounded-3xl overflow-hidden border border-zinc-800/80 bg-zinc-900/70 backdrop-blur-md p-6 sm:p-8 space-y-6 shadow-2xl">
+              <div className="relative rounded-3xl overflow-hidden border border-zinc-800/80 bg-zinc-900/70 backdrop-blur-md p-5 sm:p-7 space-y-5 shadow-2xl">
                 {/* Background Banner Blur */}
                 <div 
                   className="absolute inset-0 bg-cover bg-center opacity-20 blur-xl pointer-events-none"
                   style={{ backgroundImage: `url(${activeUniverse.bannerUrl || activeUniverse.posterUrl})` }}
                 />
                 
-                <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-6">
+                <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
                     <div>
                       <span className="text-[10px] font-mono font-black text-purple-400 uppercase tracking-widest bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-full">
@@ -611,7 +619,7 @@ export default function UniversesView({
                           >
                             <Trash2 size={14} />
                             <span>
-                              {confirmDeleteId === activeUniverse.id ? "Potvrdi brisanje?" : "Obriši Univerzum"}
+                              {confirmDeleteId === activeUniverse.id ? "Potvrdi brisanje?" : "Obriši"}
                             </span>
                           </button>
                         )}
@@ -620,7 +628,7 @@ export default function UniversesView({
                   </div>
 
                   {/* Mode switcher: Hronologija (Lista Stavki) vs Hronološki Slijed (Timeline sa strijelicama) */}
-                  <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800/80">
+                  <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800/80 shrink-0">
                     <button
                       onClick={() => setTimelineMode('chronological')}
                       className={`px-3 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -649,9 +657,9 @@ export default function UniversesView({
                     </div>
 
                     <div className="bg-zinc-950/70 border border-zinc-850 p-3 rounded-xl text-center space-y-0.5">
-                      <span className="text-[9px] uppercase font-bold text-zinc-400">Naslova u Priči</span>
-                      <p className={`text-base sm:text-lg font-mono font-black ${activeStats.totalItems >= 100 ? 'text-red-400' : 'text-purple-300'}`}>
-                        {activeStats.totalItems} / 100
+                      <span className="text-[9px] uppercase font-bold text-zinc-400">Ukupno Stavki</span>
+                      <p className="text-base sm:text-lg font-mono font-black text-purple-300">
+                        {activeStats.totalItems} <span className="text-[10px] text-zinc-500 font-normal">naslova</span>
                       </p>
                     </div>
 
@@ -669,12 +677,115 @@ export default function UniversesView({
                   </p>
                 )}
 
+                {/* TOOLBAR: SEARCH & PHASE FILTER PILLS & VIEW DENSITY CONTROLS */}
+                <div className="relative z-10 space-y-3 pt-2 border-t border-zinc-800/60">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {/* Search inside universe */}
+                    <div className="relative flex-1">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Pretraži filmove, serije i projekte u ovom univerzumu..."
+                        className="w-full bg-zinc-950/90 border border-zinc-800/80 rounded-xl pl-8 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500/60"
+                      />
+                      {searchQuery && (
+                        <button
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white p-1"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* View density and expand/collapse controls */}
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={toggleCollapseAll}
+                        className="px-2.5 py-1.5 bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-300 hover:text-white flex items-center gap-1 transition-all cursor-pointer"
+                        title={collapsedPhases.size === (activeUniverse.seasons?.length || 0) ? "Proširi sve faze" : "Skupi sve faze"}
+                      >
+                        {collapsedPhases.size === (activeUniverse.seasons?.length || 0) ? (
+                          <>
+                            <UnfoldVertical size={11} className="text-purple-400" /> Proširi sve
+                          </>
+                        ) : (
+                          <>
+                            <FoldVertical size={11} className="text-purple-400" /> Skupi sve
+                          </>
+                        )}
+                      </button>
+
+                      <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800">
+                        <button
+                          type="button"
+                          onClick={() => setViewDensity('compact')}
+                          className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                            viewDensity === 'compact' ? 'bg-purple-600 text-white shadow-sm' : 'text-zinc-400 hover:text-white'
+                          }`}
+                          title="Kompaktan prikaz za pregled velikog broja stavki"
+                        >
+                          <List size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setViewDensity('detailed')}
+                          className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                            viewDensity === 'detailed' ? 'bg-purple-600 text-white shadow-sm' : 'text-zinc-400 hover:text-white'
+                          }`}
+                          title="Detaljan prikaz sa sinopsisom i opisom"
+                        >
+                          <LayoutGrid size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Phase jump pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPhaseFilter('all')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all cursor-pointer ${
+                        selectedPhaseFilter === 'all'
+                          ? 'bg-purple-600 text-white font-extrabold shadow-sm'
+                          : 'bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 border border-zinc-850'
+                      }`}
+                    >
+                      Sve Faze ({activeStats?.totalItems || 0})
+                    </button>
+                    {activeUniverse.seasons?.map((phase) => {
+                      const isFiltered = selectedPhaseFilter === phase.seasonNumber;
+                      return (
+                        <button
+                          key={`phase-pill-${phase.seasonNumber}`}
+                          type="button"
+                          onClick={() => setSelectedPhaseFilter(phase.seasonNumber)}
+                          className={`px-3 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isFiltered
+                              ? 'bg-purple-600 text-white font-extrabold shadow-sm'
+                              : 'bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 border border-zinc-850'
+                          }`}
+                        >
+                          <span>{phase.seasonName || `Faza ${phase.seasonNumber}`}</span>
+                          <span className={`px-1 py-0.2 rounded font-mono text-[9px] ${isFiltered ? 'bg-purple-900/60 text-purple-200' : 'bg-zinc-900 text-zinc-500'}`}>
+                            {phase.episodes.length}/50
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* MODE 1: HRONOLOGIJA (STACKS & PHASES LIST VIEW) */}
                 {timelineMode === 'chronological' ? (
-                  <div className="space-y-6 relative z-10 pt-2">
+                  <div className="space-y-4 relative z-10 pt-2">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-black uppercase text-zinc-300 tracking-wider">
-                        Faze & Stackovi Univerzuma
+                        Faze & Hronologija Naslova
                       </h4>
 
                       {onUpdateUniverse && (
@@ -692,7 +803,7 @@ export default function UniversesView({
                     {/* New Phase creation bar */}
                     {isAddingPhase && (
                       <div className="bg-zinc-950 p-4 rounded-2xl border border-purple-500/40 space-y-3">
-                        <div className="text-xs font-bold text-purple-300 uppercase">Dodaj novu fazu ili stack</div>
+                        <div className="text-xs font-bold text-purple-300 uppercase">Dodaj novu fazu ili stack (do 50 stavki po fazi)</div>
                         <div className="flex gap-2">
                           <input
                             type="text"
@@ -717,179 +828,286 @@ export default function UniversesView({
                       </div>
                     )}
 
-                    {activeUniverse.seasons?.map((phase, pIdx) => (
-                      <div key={`phase-block-${pIdx}`} className="space-y-3 bg-zinc-950/60 border border-zinc-850/80 p-5 rounded-2xl">
-                        <div className="flex items-center justify-between border-b border-zinc-850 pb-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
-                            <h4 className="font-extrabold text-sm text-zinc-100 uppercase tracking-wide">
-                              {phase.seasonName || `Faza ${phase.seasonNumber}`}
-                            </h4>
-                          </div>
+                    {activeUniverse.seasons?.filter(p => selectedPhaseFilter === 'all' || p.seasonNumber === selectedPhaseFilter).map((phase, pIdx) => {
+                      const actualPhaseIdx = activeUniverse.seasons?.findIndex(s => s.seasonNumber === phase.seasonNumber) ?? pIdx;
+                      const isCollapsed = collapsedPhases.has(phase.seasonNumber);
+                      const phaseAvg = phase.episodes.length > 0
+                        ? (phase.episodes.reduce((acc, ep) => acc + (ep.rating || 0), 0) / phase.episodes.length).toFixed(1)
+                        : '—';
 
-                          <div className="flex items-center gap-3">
-                            <span className="text-[10px] font-mono text-zinc-400 font-bold">
-                              {phase.episodes.length} Projektā
-                            </span>
+                      // Filter items by search query
+                      const visibleEpisodes = phase.episodes.filter(ep => {
+                        if (!searchQuery.trim()) return true;
+                        const q = searchQuery.toLowerCase();
+                        return ep.name.toLowerCase().includes(q) || (ep.overview && ep.overview.toLowerCase().includes(q));
+                      });
 
-                            {onUpdateUniverse && (
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (activeStats && activeStats.totalItems >= MAX_UNIVERSE_ITEMS) {
-                                      alert(`Maksimalan broj stavki u univerzumu je ${MAX_UNIVERSE_ITEMS}! Ne možete dodati više stavki.`);
-                                      return;
-                                    }
-                                    setAddingToPhaseIndex(pIdx);
-                                  }}
-                                  className="px-2.5 py-1 bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 rounded-lg text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-sm"
-                                  title="Dodaj novu stavku u ovu fazu"
-                                >
-                                  <Plus size={11} /> Dodaj Stavku
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeletePhase(pIdx)}
-                                  className="p-1 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-                                  title="Obriši ovu fazu"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {phase.episodes.length === 0 ? (
-                          <div className="p-4 text-center border border-dashed border-zinc-850 rounded-xl text-zinc-500 text-xs">
-                            Ova faza nema unesenih stavki.
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {phase.episodes.map((item, iIdx) => (
-                              <div
-                                key={`phase-item-${pIdx}-${iIdx}`}
-                                className="flex items-center justify-between gap-4 p-3 rounded-xl bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800/70 hover:border-purple-500/40 transition-all duration-200 group"
-                              >
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                  <span className="w-6 h-6 rounded-lg bg-zinc-950 text-purple-400 text-[10px] font-mono font-black flex items-center justify-center shrink-0 border border-zinc-850">
-                                    #{iIdx + 1}
-                                  </span>
-
-                                  {/* ICON ONLY LINK BUTTON (CHAIN ICON) FOR INDIVIDUAL ITEM */}
-                                  {onUpdateUniverse && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setTargetItemCoords({ phaseIdx: pIdx, itemIdx: iIdx });
-                                        setIsLinkingModalOpen(true);
-                                      }}
-                                      className={`p-2 rounded-lg border transition-all cursor-pointer shrink-0 ${
-                                        item.linkTargetId
-                                          ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30'
-                                          : 'bg-zinc-950/80 text-zinc-400 border-zinc-800 hover:text-white hover:border-purple-500/30 hover:bg-zinc-900'
-                                      }`}
-                                      title="Poveži ovu stavku s filmom ili epizodom"
-                                    >
-                                      <LinkIcon size={13} />
-                                    </button>
-                                  )}
-
-                                  {item.imageUrl && (
-                                    <img 
-                                      src={item.imageUrl} 
-                                      alt={item.name} 
-                                      className="w-8 h-10 object-cover rounded bg-zinc-950 shrink-0 border border-zinc-800 cursor-pointer"
-                                      onClick={() => handleNavigateTarget(item.linkTargetId)}
-                                      referrerPolicy="no-referrer"
-                                    />
-                                  )}
-
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <h5 
-                                        onClick={() => handleNavigateTarget(item.linkTargetId)}
-                                        className={`text-xs font-black truncate transition-colors ${
-                                          item.linkTargetId ? 'text-white hover:text-purple-300 cursor-pointer underline underline-offset-2 decoration-purple-500/40' : 'text-zinc-200'
-                                        }`}
-                                      >
-                                        {item.name}
-                                      </h5>
-                                      {item.linkTargetId && (
-                                        <button
-                                          onClick={() => handleNavigateTarget(item.linkTargetId)}
-                                          className="text-[9px] text-sky-400 bg-sky-950/60 px-1.5 py-0.2 rounded border border-sky-800/50 hover:bg-sky-900 transition flex items-center gap-1 shrink-0"
-                                          title="Otvoriti u katalogu"
-                                        >
-                                          <ExternalLink size={9} /> Otvori
-                                        </button>
-                                      )}
-                                    </div>
-                                    {item.overview && (
-                                      <p className="text-[10px] text-zinc-400 line-clamp-1 mt-0.5">
-                                        {item.overview}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-3 shrink-0">
-                                  <div className="flex items-center gap-1 bg-zinc-950 px-2.5 py-1 rounded-lg border border-zinc-850 font-mono text-xs font-black text-yellow-400">
-                                    <Star size={11} className="fill-current" />
-                                    <span>{item.rating > 0 ? item.rating.toFixed(1) : '—'}</span>
-                                  </div>
-
-                                  {onUpdateUniverse && (
-                                    <div className="flex items-center gap-1 border-l border-zinc-800 pl-2">
-                                      <button
-                                        onClick={() => handleMoveItemInPhase(pIdx, iIdx, 'up')}
-                                        disabled={iIdx === 0}
-                                        className="p-1 text-zinc-400 hover:text-white disabled:opacity-20 cursor-pointer"
-                                        title="Pomjeri gore"
-                                      >
-                                        <ArrowUp size={11} />
-                                      </button>
-                                      <button
-                                        onClick={() => handleMoveItemInPhase(pIdx, iIdx, 'down')}
-                                        disabled={iIdx === phase.episodes.length - 1}
-                                        className="p-1 text-zinc-400 hover:text-white disabled:opacity-20 cursor-pointer"
-                                        title="Pomjeri dole"
-                                      >
-                                        <ArrowDown size={11} />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteItemFromPhase(pIdx, iIdx)}
-                                        className="p-1 text-red-400 hover:text-red-300 cursor-pointer ml-1"
-                                        title="Ukloni stavku"
-                                      >
-                                        <Trash2 size={11} />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {onUpdateUniverse && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (activeStats && activeStats.totalItems >= MAX_UNIVERSE_ITEMS) {
-                                alert(`Maksimalan broj stavki u univerzumu je ${MAX_UNIVERSE_ITEMS}! Ne možete dodati više stavki.`);
-                                return;
-                              }
-                              setAddingToPhaseIndex(pIdx);
-                            }}
-                            className="w-full py-2 border border-dashed border-zinc-800 hover:border-purple-500/50 bg-zinc-900/30 hover:bg-zinc-900/80 rounded-xl text-zinc-400 hover:text-purple-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
+                      return (
+                        <div key={`phase-block-${phase.seasonNumber}`} className="space-y-3 bg-zinc-950/70 border border-zinc-850/90 p-4 sm:p-5 rounded-2xl shadow-lg transition-all">
+                          <div 
+                            onClick={() => togglePhaseCollapse(phase.seasonNumber)}
+                            className="flex items-center justify-between border-b border-zinc-850/80 pb-2.5 cursor-pointer select-none group"
                           >
-                            <Plus size={13} /> Dodaj novu stavku u {phase.seasonName || `Fazu ${phase.seasonNumber}`}
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+                              <h4 className="font-extrabold text-sm text-zinc-100 uppercase tracking-wide group-hover:text-purple-300 transition-colors">
+                                {phase.seasonName || `Faza ${phase.seasonNumber}`}
+                              </h4>
+                              <span className="text-[10px] font-mono font-black text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
+                                {phase.episodes.length}/50 stavki
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-1 text-yellow-400 text-xs font-mono font-black">
+                                <Star size={11} className="fill-current" />
+                                <span>{phaseAvg}</span>
+                              </div>
+
+                              {onUpdateUniverse && (
+                                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (phase.episodes.length >= MAX_ITEMS_PER_PHASE) {
+                                        alert(`Maksimalan broj stavki po fazi je ${MAX_ITEMS_PER_PHASE}! Ova faza je već popunjena.`);
+                                        return;
+                                      }
+                                      setAddingToPhaseIndex(actualPhaseIdx);
+                                    }}
+                                    className="px-2.5 py-1 bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 rounded-lg text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                                    title="Dodaj novu stavku u ovu fazu"
+                                  >
+                                    <Plus size={11} /> Dodaj ({phase.episodes.length}/50)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePhase(actualPhaseIdx)}
+                                    className="p-1 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                                    title="Obriši ovu fazu"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              )}
+
+                              <div className="text-zinc-500 group-hover:text-zinc-300 transition-colors">
+                                {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                              </div>
+                            </div>
+                          </div>
+
+                          {!isCollapsed && (
+                            <div className="space-y-2 pt-1 animate-fade-in">
+                              {phase.episodes.length === 0 ? (
+                                <div className="p-5 text-center border border-dashed border-zinc-850 rounded-xl text-zinc-500 text-xs">
+                                  Ova faza nema unesenih stavki. Kliknite "Dodaj stavku" za unos (do 50 stavki).
+                                </div>
+                              ) : visibleEpisodes.length === 0 ? (
+                                <div className="p-4 text-center border border-zinc-850/50 rounded-xl text-zinc-500 text-xs">
+                                  Nema stavki koje odgovaraju pretrazi "{searchQuery}".
+                                </div>
+                              ) : (
+                                <div className={viewDensity === 'compact' ? 'space-y-1.5' : 'grid grid-cols-1 sm:grid-cols-2 gap-2.5'}>
+                                  {visibleEpisodes.map((item, iIdx) => {
+                                    const rawItemIdx = phase.episodes.findIndex(e => e.id === item.id);
+
+                                    if (viewDensity === 'compact') {
+                                      return (
+                                        <div
+                                          key={`phase-item-${phase.seasonNumber}-${item.id || iIdx}`}
+                                          className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-900 border border-zinc-800/80 hover:border-purple-500/40 transition-all duration-150 group"
+                                        >
+                                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                            <span className="w-6 h-6 rounded-lg bg-zinc-950 text-purple-400 text-[10px] font-mono font-black flex items-center justify-center shrink-0 border border-zinc-850">
+                                              #{item.episodeNumber}
+                                            </span>
+
+                                            {/* Link Chain Icon */}
+                                            {onUpdateUniverse && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setTargetItemCoords({ phaseIdx: actualPhaseIdx, itemIdx: rawItemIdx });
+                                                  setIsLinkingModalOpen(true);
+                                                }}
+                                                className={`p-1.5 rounded-lg border transition-all cursor-pointer shrink-0 ${
+                                                  item.linkTargetId
+                                                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30'
+                                                    : 'bg-zinc-950/80 text-zinc-400 border-zinc-800 hover:text-white hover:border-purple-500/30 hover:bg-zinc-900'
+                                                }`}
+                                                title={item.linkTargetId ? "Stavka je povezana. Klikni za promjenu" : "Poveži ovu stavku s filmom ili epizodom"}
+                                              >
+                                                <LinkIcon size={12} />
+                                              </button>
+                                            )}
+
+                                            {item.imageUrl && (
+                                              <img 
+                                                src={item.imageUrl} 
+                                                alt={item.name} 
+                                                className="w-7 h-9 object-cover rounded bg-zinc-950 shrink-0 border border-zinc-800 cursor-pointer"
+                                                onClick={() => handleNavigateTarget(item.linkTargetId)}
+                                                referrerPolicy="no-referrer"
+                                              />
+                                            )}
+
+                                            <div className="min-w-0 flex-1 flex items-center gap-2">
+                                              <h5 
+                                                onClick={() => handleNavigateTarget(item.linkTargetId)}
+                                                className={`text-xs font-black truncate transition-colors ${
+                                                  item.linkTargetId ? 'text-white hover:text-purple-300 cursor-pointer underline underline-offset-2 decoration-purple-500/40' : 'text-zinc-200'
+                                                }`}
+                                              >
+                                                {item.name}
+                                              </h5>
+                                              {item.linkTargetId && (
+                                                <button
+                                                  onClick={() => handleNavigateTarget(item.linkTargetId)}
+                                                  className="text-[9px] text-sky-400 bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-800/50 hover:bg-sky-900 transition flex items-center gap-1 shrink-0"
+                                                  title="Otvoriti u katalogu"
+                                                >
+                                                  <ExternalLink size={9} /> Otvori
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center gap-2.5 shrink-0">
+                                            <div className="flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded-lg border border-zinc-850 font-mono text-xs font-black text-yellow-400">
+                                              <Star size={10} className="fill-current" />
+                                              <span>{item.rating > 0 ? item.rating.toFixed(1) : '—'}</span>
+                                            </div>
+
+                                            {onUpdateUniverse && (
+                                              <div className="flex items-center gap-1 border-l border-zinc-800 pl-2">
+                                                <button
+                                                  onClick={() => handleMoveItemInPhase(actualPhaseIdx, rawItemIdx, 'up')}
+                                                  disabled={rawItemIdx === 0}
+                                                  className="p-1 text-zinc-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                                                  title="Pomjeri gore"
+                                                >
+                                                  <ArrowUp size={11} />
+                                                </button>
+                                                <button
+                                                  onClick={() => handleMoveItemInPhase(actualPhaseIdx, rawItemIdx, 'down')}
+                                                  disabled={rawItemIdx === phase.episodes.length - 1}
+                                                  className="p-1 text-zinc-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                                                  title="Pomjeri dole"
+                                                >
+                                                  <ArrowDown size={11} />
+                                                </button>
+                                                <button
+                                                  onClick={() => handleDeleteItemFromPhase(actualPhaseIdx, rawItemIdx)}
+                                                  className="p-1 text-red-400 hover:text-red-300 cursor-pointer ml-1"
+                                                  title="Ukloni stavku"
+                                                >
+                                                  <Trash2 size={11} />
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    // Detailed layout
+                                    return (
+                                      <div
+                                        key={`phase-item-detailed-${phase.seasonNumber}-${item.id || iIdx}`}
+                                        className="p-3 rounded-xl bg-zinc-900/80 hover:bg-zinc-900 border border-zinc-800/80 hover:border-purple-500/40 transition-all duration-150 flex flex-col justify-between gap-2"
+                                      >
+                                        <div className="flex items-start gap-3">
+                                          {item.imageUrl && (
+                                            <img 
+                                              src={item.imageUrl} 
+                                              alt={item.name} 
+                                              className="w-10 h-14 object-cover rounded-lg bg-zinc-950 shrink-0 border border-zinc-800"
+                                              onClick={() => handleNavigateTarget(item.linkTargetId)}
+                                              referrerPolicy="no-referrer"
+                                            />
+                                          )}
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="text-[9px] font-mono font-bold text-purple-400 bg-purple-500/10 px-1.5 py-0.2 rounded">
+                                                #{item.episodeNumber}
+                                              </span>
+                                              <h5 
+                                                onClick={() => handleNavigateTarget(item.linkTargetId)}
+                                                className={`text-xs font-black truncate ${
+                                                  item.linkTargetId ? 'text-white hover:text-purple-300 cursor-pointer' : 'text-zinc-200'
+                                                }`}
+                                              >
+                                                {item.name}
+                                              </h5>
+                                            </div>
+                                            {item.overview && (
+                                              <p className="text-[10px] text-zinc-400 line-clamp-2 mt-1">
+                                                {item.overview}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between border-t border-zinc-850 pt-2 mt-1">
+                                          <div className="flex items-center gap-1 text-yellow-400 font-mono text-xs font-bold">
+                                            <Star size={11} className="fill-current" />
+                                            <span>{item.rating > 0 ? item.rating.toFixed(1) : '—'}</span>
+                                          </div>
+
+                                          <div className="flex items-center gap-1.5">
+                                            {item.linkTargetId && (
+                                              <button
+                                                onClick={() => handleNavigateTarget(item.linkTargetId)}
+                                                className="text-[9px] text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/50 hover:bg-sky-900 transition flex items-center gap-1"
+                                              >
+                                                <ExternalLink size={9} /> Otvori
+                                              </button>
+                                            )}
+                                            {onUpdateUniverse && (
+                                              <>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setTargetItemCoords({ phaseIdx: actualPhaseIdx, itemIdx: rawItemIdx });
+                                                    setIsLinkingModalOpen(true);
+                                                  }}
+                                                  className="p-1 text-zinc-400 hover:text-purple-300 cursor-pointer"
+                                                  title="Poveži stavku"
+                                                >
+                                                  <LinkIcon size={12} />
+                                                </button>
+                                                <button
+                                                  onClick={() => handleDeleteItemFromPhase(actualPhaseIdx, rawItemIdx)}
+                                                  className="p-1 text-red-400 hover:text-red-300 cursor-pointer"
+                                                  title="Ukloni stavku"
+                                                >
+                                                  <Trash2 size={12} />
+                                                </button>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {onUpdateUniverse && phase.episodes.length < MAX_ITEMS_PER_PHASE && (
+                                <button
+                                  type="button"
+                                  onClick={() => setAddingToPhaseIndex(actualPhaseIdx)}
+                                  className="w-full py-2 border border-dashed border-zinc-800 hover:border-purple-500/50 bg-zinc-900/30 hover:bg-zinc-900/80 rounded-xl text-zinc-400 hover:text-purple-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
+                                >
+                                  <Plus size={13} /> Dodaj novu stavku u {phase.seasonName || `Fazu ${phase.seasonNumber}`} ({phase.episodes.length}/50)
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   /* MODE 2: HRONOLOŠKI SLIJED (TRUE VISUAL TIMELINE WITH ARROWS) */
@@ -901,17 +1119,17 @@ export default function UniversesView({
                           Hronološki Vremenski Slijed Događaja
                         </h4>
                         <p className="text-[10px] text-zinc-400 mt-0.5">
-                          Pratite tačan redoslijed priče kroz strijelice i hronološke linije od početka do kraja.
+                          Pratite tačan redoslijed priče kroz strijelice i hronološke linije od početka do kraja ({chronologicalTimelineItems.length} prikazano).
                         </p>
                       </div>
                     </div>
 
                     {chronologicalTimelineItems.length === 0 ? (
                       <div className="p-8 text-center text-zinc-500 text-xs border border-dashed border-zinc-850 rounded-2xl">
-                        Nema stavki u vremenskoj liniji. Prebacite se na "Hronologija" mod da dodate filmove i serije!
+                        Nema stavki koje odgovaraju odabranom filteru. Prebacite se na "Hronologija" mod da dodate filmove i serije!
                       </div>
                     ) : (
-                      <div className="relative pl-6 space-y-8 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gradient-to-b before:from-purple-500 before:via-yellow-500 before:to-purple-900">
+                      <div className="relative pl-6 space-y-6 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gradient-to-b before:from-purple-500 before:via-yellow-500 before:to-purple-900">
                         {chronologicalTimelineItems.map((step, idx) => (
                           <div key={`timeline-step-${idx}`} className="relative group">
                             {/* Glowing timeline node dot */}
@@ -919,14 +1137,15 @@ export default function UniversesView({
                               <div className="w-1.5 h-1.5 rounded-full bg-purple-400 group-hover:bg-yellow-400" />
                             </div>
 
-                            <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800/80 group-hover:border-purple-500/50 shadow-xl transition-all duration-200">
+                            <div className="p-3.5 rounded-2xl bg-zinc-950/80 border border-zinc-800/80 group-hover:border-purple-500/50 shadow-xl transition-all duration-200">
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div className="flex items-center gap-3 min-w-0">
                                   {step.item.imageUrl && (
                                     <img 
                                       src={step.item.imageUrl} 
                                       alt={step.item.name} 
-                                      className="w-10 h-14 object-cover rounded-xl bg-zinc-900 shrink-0 border border-zinc-800 group-hover:border-yellow-400/50 transition-colors"
+                                      className="w-10 h-14 object-cover rounded-xl bg-zinc-900 shrink-0 border border-zinc-800 group-hover:border-yellow-400/50 transition-colors cursor-pointer"
+                                      onClick={() => handleNavigateTarget(step.item.linkTargetId)}
                                       referrerPolicy="no-referrer"
                                     />
                                   )}
@@ -937,7 +1156,10 @@ export default function UniversesView({
                                         KORAK #{step.index} • {step.phaseName}
                                       </span>
                                     </div>
-                                    <h5 className="font-extrabold text-sm text-white group-hover:text-yellow-400 transition-colors mt-1">
+                                    <h5 
+                                      onClick={() => handleNavigateTarget(step.item.linkTargetId)}
+                                      className="font-extrabold text-sm text-white group-hover:text-yellow-400 transition-colors mt-1 cursor-pointer"
+                                    >
                                       {step.item.name}
                                     </h5>
                                     {step.item.overview && (
@@ -978,18 +1200,6 @@ export default function UniversesView({
                     )}
                   </div>
                 )}
-
-                {/* Action button to scroll up to active universe details */}
-                <div className="pt-2">
-                  <button
-                    onClick={() => {
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <Layers size={14} /> Prikaz Faza i Vremenske Linije Univerzuma
-                  </button>
-                </div>
               </div>
             </div>
           )}
@@ -1043,7 +1253,7 @@ export default function UniversesView({
                 </div>
 
                 {linkCategory === 'movie' ? (
-                  /* MOVIE PICKER */
+                  /* MOVIE PICKER (strictly movies) */
                   <div className="space-y-2">
                     <label className="text-[10px] font-mono font-bold uppercase text-zinc-400">Izaberi Film iz Kataloga:</label>
                     <select
@@ -1078,7 +1288,7 @@ export default function UniversesView({
                     })()}
                   </div>
                 ) : (
-                  /* SERIES & EPISODE PICKER */
+                  /* SERIES & EPISODE PICKER (strictly shows) */
                   <div className="space-y-3">
                     <div>
                       <label className="text-[10px] font-mono font-bold uppercase text-zinc-400 block mb-1">1. Izaberi Seriju:</label>
@@ -1192,6 +1402,7 @@ export default function UniversesView({
             </motion.div>
           </div>
         )}
+
         {/* DEDICATED MODAL TO ADD ITEM TO A SPECIFIC PHASE */}
         {addingToPhaseIndex !== null && activeUniverse && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
@@ -1206,7 +1417,7 @@ export default function UniversesView({
                       Dodaj Stavku u Fazu #{addingToPhaseIndex + 1}
                     </h3>
                     <p className="text-[10px] text-zinc-400">
-                      {activeUniverse.seasons?.[addingToPhaseIndex]?.seasonName || `Faza ${addingToPhaseIndex + 1}`} • Max 100 stavki
+                      {activeUniverse.seasons?.[addingToPhaseIndex]?.seasonName || `Faza ${addingToPhaseIndex + 1}`} • Max 50 stavki ({activeUniverse.seasons?.[addingToPhaseIndex]?.episodes.length || 0}/50)
                     </p>
                   </div>
                 </div>
@@ -1402,4 +1613,3 @@ export default function UniversesView({
     </div>
   );
 }
-

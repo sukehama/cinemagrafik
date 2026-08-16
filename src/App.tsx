@@ -512,9 +512,9 @@ export default function App() {
 
   // Get unique existing actors across all media along with all of their appearances/roles
   const allActorsWithAppearances = useMemo(() => {
-    const map = new Map<string, { actor: Actor; appearances: { entryId: string; entryName: string; type: 'show' | 'movie' | 'universe'; seasonNum?: number; epNum?: number; epName?: string; rawActor: Actor }[] }>();
+    const map = new Map<string, { actor: Actor; appearances: { entryId: string; entryName: string; type: 'show' | 'movie'; seasonNum?: number; epNum?: number; epName?: string; rawActor: Actor }[] }>();
     
-    entries.forEach(entry => {
+    entries.filter(e => e.type !== 'universe').forEach(entry => {
       if (entry.type === 'movie') {
         (entry.movieActors || []).forEach(act => {
           const key = act.name.trim().toLowerCase();
@@ -539,7 +539,7 @@ export default function App() {
               map.get(key)!.appearances.push({
                 entryId: entry.id,
                 entryName: entry.name,
-                type: entry.type as 'show' | 'universe',
+                type: 'show',
                 seasonNum: s.seasonNumber,
                 epNum: ep.episodeNumber,
                 epName: ep.name,

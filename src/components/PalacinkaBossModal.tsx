@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Trophy, Sparkles, RefreshCw, AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
 
-// Default boss image path in public directory - users can place their file at /public/boss_palacinka.png
-export const PALACINKA_BOSS_IMAGE_SRC = '/boss_palacinka.png';
+// Boss character image in public directory
+export const PALACINKA_BOSS_IMAGE_SRC = 'kralj_palacinki.png';
 
 interface PalacinkaBossModalProps {
   isActive: boolean;
@@ -138,6 +138,7 @@ export default function PalacinkaBossModal({ isActive, onClose, onBossDefeated }
   // Boss & Projectiles
   const [bossPos, setBossPos] = useState<Point>({ x: 150, y: 120 });
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
+  const [bossImgSrc, setBossImgSrc] = useState<string>(PALACINKA_BOSS_IMAGE_SRC);
   const [customImageFailed, setCustomImageFailed] = useState(false);
 
   // Mouse & UI feedback
@@ -155,14 +156,20 @@ export default function PalacinkaBossModal({ isActive, onClose, onBossDefeated }
   const projectileIdRef = useRef<number>(1);
   const animFrameRef = useRef<number>(0);
   const bossPosRef = useRef<Point>({ x: 180, y: 120 });
-  const bossVelRef = useRef<Point>({ x: 2.6, y: 2.1 });
+  const bossVelRef = useRef<Point>({ x: 2.8, y: 2.3 });
   const mousePosRef = useRef<Point>({ x: 0, y: 0 });
   const hasKnifeRef = useRef<boolean>(false);
+  const currentPatternIndexRef = useRef<number>(0);
+  const coveragePercentRef = useRef<number>(0);
 
   // Sync ref with state
   useEffect(() => {
     hasKnifeRef.current = hasKnife;
   }, [hasKnife]);
+
+  useEffect(() => {
+    currentPatternIndexRef.current = currentPatternIndex;
+  }, [currentPatternIndex]);
 
   // Precomputed checkpoints for current pattern
   const currentCheckpoints = useMemo(() => {
@@ -174,6 +181,10 @@ export default function PalacinkaBossModal({ isActive, onClose, onBossDefeated }
     if (currentCheckpoints.length === 0) return 0;
     return Math.min(100, Math.round((coveredCheckpoints.size / currentCheckpoints.length) * 100));
   }, [coveredCheckpoints, currentCheckpoints]);
+
+  useEffect(() => {
+    coveragePercentRef.current = coveragePercent;
+  }, [coveragePercent]);
 
   const accuracyPercent = useMemo(() => {
     if (drawnDots.length === 0) return 100;
@@ -243,15 +254,20 @@ export default function PalacinkaBossModal({ isActive, onClose, onBossDefeated }
   useEffect(() => {
     if (phase !== 'arena') return;
 
-    const projectileIcons = ['🧈', '🍓', '🍴', '🍫', '🌰', '🥞'];
+    const projectileIcons = ['🥞', '🧈', '🍓', '🍴', '🍫', '🌰', '🍯', '🍌', '🍒', '🥄', '⚡', '🔥'];
 
     const gameLoop = () => {
       const arena = arenaRef.current;
       if (arena) {
         const bounds = arena.getBoundingClientRect();
-        const padding = 75;
+        const padding = 105;
 
-        // Move Boss smoothly across entire screen
+        // Current progress scaling based on correct spreads completed
+        const patternIndex = currentPatternIndexRef.current; // 0, 1, 2, 3, 4
+        const coverage = coveragePercentRef.current; // 0 to 100
+
+        // Move Boss smoothly across entire screen, slightly faster at higher levels
+        const maxSpeed = 3.5 + patternIndex * 0.4;
         let nx = bossPosRef.current.x + bossVelRef.current.x;
         let ny = bossPosRef.current.y + bossVelRef.current.y;
         let vx = bossVelRef.current.x;
@@ -260,44 +276,55 @@ export default function PalacinkaBossModal({ isActive, onClose, onBossDefeated }
         // Bounce off left/right bounds
         if (nx <= padding) {
           nx = padding;
-          vx = Math.abs(vx) + (Math.random() * 0.4 - 0.2);
+          vx = Math.abs(vx) + (Math.random() * 0.5 - 0.25);
         } else if (nx >= bounds.width - padding) {
           nx = bounds.width - padding;
-          vx = -Math.abs(vx) - (Math.random() * 0.4 - 0.2);
+          vx = -Math.abs(vx) - (Math.random() * 0.5 - 0.25);
         }
 
         // Bounce off top/bottom bounds
-        if (ny <= padding + 20) {
-          ny = padding + 20;
-          vy = Math.abs(vy) + (Math.random() * 0.4 - 0.2);
-        } else if (ny >= bounds.height - padding - 20) {
-          ny = bounds.height - padding - 20;
-          vy = -Math.abs(vy) - (Math.random() * 0.4 - 0.2);
+        if (ny <= padding) {
+          ny = padding;
+          vy = Math.abs(vy) + (Math.random() * 0.5 - 0.25);
+        } else if (ny >= bounds.height - padding) {
+          ny = bounds.height - padding;
+          vy = -Math.abs(vy) - (Math.random() * 0.5 - 0.25);
         }
 
-        // Clamp speed to pleasant medium pace
-        vx = Math.min(Math.max(vx, -3.5), 3.5);
-        vy = Math.min(Math.max(vy, -3.0), 3.0);
-        if (Math.abs(vx) < 1.2) vx = vx < 0 ? -1.8 : 1.8;
-        if (Math.abs(vy) < 1.0) vy = vy < 0 ? -1.5 : 1.5;
+        // Clamp speed
+        vx = Math.min(Math.max(vx, -maxSpeed), maxSpeed);
+        vy = Math.min(Math.max(vy, -maxSpeed), maxSpeed);
+        if (Math.abs(vx) < 1.5) vx = vx < 0 ? -2.0 : 2.0;
+        if (Math.abs(vy) < 1.2) vy = vy < 0 ? -1.8 : 1.8;
 
         bossPosRef.current = { x: nx, y: ny };
         bossVelRef.current = { x: vx, y: vy };
         setBossPos({ x: nx, y: ny });
 
-        // Multi-Projectile Spawning strictly FROM THE MOVING BOSS
+        // Dynamic Spawning: Fire rate gets faster as more spreads are completed
+        // e.g. from 2400ms down to 800ms
+        const dynamicFireInterval = Math.max(800, 2400 - (patternIndex * 340) - Math.floor(coverage * 3.5));
         const now = Date.now();
-        if (now - lastShotTimeRef.current > 3000) {
+
+        if (now - lastShotTimeRef.current > dynamicFireInterval) {
           lastShotTimeRef.current = now;
 
-          // Spawn 3 to 4 projectiles fanning across random screen angles at medium speed
-          const burstCount = 3 + Math.floor(Math.random() * 2);
+          // Burst count scales with correct spreads:
+          // Pattern 0 (1st spread): 4-5 projectiles
+          // Pattern 1 (2nd spread): 6-8 projectiles
+          // Pattern 2 (3rd spread): 8-10 projectiles
+          // Pattern 3 (4th spread): 10-12 projectiles
+          // Pattern 4 (5th spread): 12-16 projectiles!
+          const burstCount = 4 + (patternIndex * 2) + (coverage > 50 ? 1 : 0) + Math.floor(Math.random() * 3);
           const baseAngle = Math.random() * Math.PI * 2;
           const newBursts: Projectile[] = [];
 
+          // Projectiles fly faster as more spreads are made
+          const baseSpeed = 2.8 + (patternIndex * 0.65) + (coverage * 0.012);
+
           for (let i = 0; i < burstCount; i++) {
-            const angle = baseAngle + (i * ((Math.PI * 2) / burstCount)) + (Math.random() * 0.4 - 0.2);
-            const speed = 2.4 + Math.random() * 1.2; // Medium friendly speed
+            const angle = baseAngle + (i * ((Math.PI * 2) / burstCount)) + (Math.random() * 0.35 - 0.175);
+            const speed = baseSpeed + Math.random() * 1.6;
             const chosenIcon = projectileIcons[Math.floor(Math.random() * projectileIcons.length)];
 
             newBursts.push({
@@ -308,11 +335,11 @@ export default function PalacinkaBossModal({ isActive, onClose, onBossDefeated }
               vy: Math.sin(angle) * speed,
               icon: chosenIcon,
               rotation: Math.random() * 360,
-              vRot: (Math.random() - 0.5) * 8
+              vRot: (Math.random() - 0.5) * 10
             });
           }
 
-          setProjectiles(prev => [...prev.slice(-15), ...newBursts]);
+          setProjectiles(prev => [...prev.slice(-45), ...newBursts]);
         }
 
         // Update Projectiles & Check Collision with player's Knife
@@ -489,7 +516,31 @@ export default function PalacinkaBossModal({ isActive, onClose, onBossDefeated }
 
         {/* PHASE 1: INTRO SEQUENCE */}
         {phase === 'intro' && (
-          <div className="flex flex-col items-center justify-center p-6 text-center">
+          <div className="flex flex-col items-center justify-center p-6 text-center space-y-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.7, y: 20 }}
+              animate={{ opacity: introTextOpacity, scale: [1, 1.06, 1], y: 0 }}
+              transition={{ 
+                duration: 0.8, 
+                ease: 'easeOut',
+                scale: { repeat: Infinity, duration: 2.5, ease: 'easeInOut' }
+              }}
+              className="relative w-72 h-72 sm:w-96 sm:h-96 max-w-[440px] max-h-[440px] flex items-center justify-center pointer-events-none"
+            >
+              <img 
+                src={bossImgSrc}
+                alt="Kralj Palačinki"
+                className="w-full h-full max-h-80 sm:max-h-96 object-contain drop-shadow-[0_0_50px_rgba(245,158,11,0.9)] filter"
+                onError={() => {
+                  if (bossImgSrc === 'kralj_palacinki.png') {
+                    setBossImgSrc('/kralj_palacinki.png');
+                  } else {
+                    setCustomImageFailed(true);
+                  }
+                }}
+              />
+            </motion.div>
+
             <motion.p
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: introTextOpacity, scale: 1 }}
@@ -611,22 +662,38 @@ export default function PalacinkaBossModal({ isActive, onClose, onBossDefeated }
                     </div>
                   )}
 
-                  {/* BOSS IMAGE CONTAINER (Image loaded from /public/boss_palacinka.png) */}
-                  <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-amber-400 bg-zinc-900 shadow-[0_0_35px_rgba(245,158,11,0.5)] overflow-hidden flex items-center justify-center">
+                  {/* BOSS CHARACTER CUTOUT (with luminous outline glow) */}
+                  <motion.div 
+                    animate={{
+                      scale: [1, 1.05, 1],
+                      rotate: [-2, 2, -2]
+                    }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 1.8,
+                      ease: 'easeInOut'
+                    }}
+                    className="relative w-64 h-72 sm:w-80 sm:h-96 md:w-96 md:h-[420px] flex items-center justify-center pointer-events-none"
+                  >
                     {!customImageFailed ? (
                       <img 
-                        src={PALACINKA_BOSS_IMAGE_SRC}
-                        alt="Boss"
-                        className="w-full h-full object-cover"
-                        onError={() => setCustomImageFailed(true)}
+                        src={bossImgSrc}
+                        alt="Kralj Palačinki"
+                        className="w-full h-full object-contain filter drop-shadow-[0_0_35px_rgba(245,158,11,0.95)] drop-shadow-[0_0_12px_rgba(255,255,255,0.85)]"
+                        onError={() => {
+                          if (bossImgSrc === 'kralj_palacinki.png') {
+                            setBossImgSrc('/kralj_palacinki.png');
+                          } else {
+                            setCustomImageFailed(true);
+                          }
+                        }}
                       />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 flex items-center justify-center text-4xl shadow-inner">
+                      <div className="text-8xl filter drop-shadow-[0_0_30px_rgba(245,158,11,0.9)]">
                         🥞
                       </div>
                     )}
-                    <span className="absolute -top-1 right-2 text-xl drop-shadow-[0_0_8px_gold]">👑</span>
-                  </div>
+                  </motion.div>
                 </div>
               </div>
             )}

@@ -58,7 +58,7 @@ export default function AddEntryModal({ onClose, onAdd }: AddEntryModalProps) {
 
 
   const updateSeasonsCountAndSync = (count: number) => {
-    const minCount = Math.max(1, Math.min(25, count));
+    const minCount = Math.max(1, Math.min(50, count));
     setSeasonsCount(minCount);
     setIndividualSeasonCounts(prev => {
       const next = [...prev];
@@ -363,7 +363,7 @@ export default function AddEntryModal({ onClose, onAdd }: AddEntryModalProps) {
                   <input
                     type="number"
                     min={1}
-                    max={25}
+                    max={50}
                     value={episodesPerSeason}
                     onChange={(e) => syncEpisodesPerSeasonAll(Number(e.target.value))}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-yellow-500 font-mono font-bold text-center"
@@ -436,7 +436,7 @@ export default function AddEntryModal({ onClose, onAdd }: AddEntryModalProps) {
                           <input
                             type="number"
                             min={1}
-                            max={35}
+                            max={50}
                             value={val}
                             onChange={(e) => {
                               const newVal = Math.max(1, Number(e.target.value));

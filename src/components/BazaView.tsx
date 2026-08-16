@@ -232,7 +232,7 @@ export default function BazaView({
           rating: entry.movieRating || 0,
           year: entry.year
         });
-      } else if (entry.type === 'show' || entry.type === 'universe') {
+      } else if (entry.type === 'show') {
         (entry.seasons || []).forEach(season => {
           (season.episodes || []).forEach(ep => {
             itemsList.push({

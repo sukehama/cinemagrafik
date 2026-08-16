@@ -1049,7 +1049,7 @@ export default function DetailPopup({
                               className="w-full bg-zinc-900 border border-zinc-805 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-yellow-400"
                             >
                               <option value="">-- Odaberi iz kataloga --</option>
-                              {allEntriesAvailable.map(item => {
+                              {allEntriesAvailable.filter(item => item.type !== 'universe').map(item => {
                                 if (item.type === 'movie') {
                                   return (
                                     <option key={`lnk-t-${item.id}-${idx}`} value={item.id}>
@@ -1060,11 +1060,10 @@ export default function DetailPopup({
                                   return (item.seasons || []).flatMap(s => 
                                     (s.episodes || []).map(ep => {
                                       const composite = `${item.id}|${s.seasonNumber}|${ep.episodeNumber}`;
-                                      const typ = item.type === 'universe' ? 'Univerzum' : 'Serija';
-                                      const label = item.type === 'universe' ? (s.seasonName || `Faza ${s.seasonNumber}`) : `Sezona ${s.seasonNumber}`;
+                                      const label = `Sezona ${s.seasonNumber}`;
                                       return (
                                         <option key={`lnk-t-${composite}-${idx}`} value={composite}>
-                                          📺 [{typ}] {item.name} - {label}, E{ep.episodeNumber}: {ep.name}
+                                          📺 [Serija] {item.name} - {label}, E{ep.episodeNumber}: {ep.name}
                                         </option>
                                       );
                                     })
