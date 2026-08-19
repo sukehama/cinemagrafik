@@ -1,20 +1,15 @@
-name: Build Desktop & Mobile Apps
+name: Build Windows & Android Apps
 
 on:
   push:
     branches: [ main ] # Change to master if your default branch is master
 
 jobs:
-  # 1. BUILD DESKTOP INSTALLERS (Windows, Mac, Linux)
-  build-desktop:
+  # 1. BUILD WINDOWS INSTALLER
+  build-windows:
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [windows-latest, macos-latest, ubuntu-22.04]
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -26,19 +21,15 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-
       - name: Install Frontend Dependencies
         run: npm install
 
-      - name: Build Tauri App (Desktop)
+      - name: Build Tauri App (Windows)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
           tagName: v1.0.0-${{ github.run_number }}
           releaseName: 'Automated Release v1.0.0-${{ github.run_number }}'
@@ -47,7 +38,7 @@ jobs:
 
   # 2. BUILD ANDROID APK
   build-android:
-    needs: build-desktop
+    needs: build-windows
     permissions:
       contents: write
     runs-on: ubuntu-latest

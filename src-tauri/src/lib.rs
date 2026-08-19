@@ -1,8 +1,8 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default();
+    let mut builder = tauri::Builder::default(); // Made mutable
 
-    // Updater se registruje samo za desktop (Windows/macOS/Linux)
+    // Updater registers only for desktop
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
