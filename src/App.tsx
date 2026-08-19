@@ -1482,30 +1482,30 @@ export default function App() {
         />
 
         {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
-        <header id="app-navbar" className="sticky top-0 z-40 px-4 sm:px-8 py-3.5 backdrop-blur-3xl bg-zinc-950/85 shadow-[0_10px_40px_rgba(0,0,0,0.8)] transition-all">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <header id="app-navbar" className="sticky top-0 z-40 px-3 sm:px-8 py-2.5 sm:py-3.5 backdrop-blur-3xl bg-zinc-950/85 border-b border-zinc-850/60 shadow-[0_10px_40px_rgba(0,0,0,0.8)] transition-all">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
             
             {/* TOP LEFT: BRAND LOGO & QUICK ENTRY SELECTOR */}
-            <div className="flex items-center justify-between md:justify-start gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <button
                 onClick={() => { 
                   handleLogoClick(); 
                   setActiveTab('home'); 
                   setSelectedActorName(null); 
                 }}
-                className="flex items-center gap-2.5 group cursor-pointer"
+                className="flex items-center gap-2 group cursor-pointer"
                 title={isVedoMode ? "Vedo Dela Režim (Klikni 6x za isključivanje)" : "Cinema Grafik (Klikni 6x za iznenađenje)"}
               >
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-yellow-400 to-amber-500 flex items-center justify-center text-zinc-955 font-black shadow-[0_0_15px_rgba(250,204,21,0.35)] group-hover:scale-105 transition-transform overflow-hidden">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-yellow-400 to-amber-500 flex items-center justify-center text-zinc-955 font-black shadow-[0_0_15px_rgba(250,204,21,0.35)] group-hover:scale-105 transition-transform overflow-hidden shrink-0">
                   {isVedoMode ? (
                     <img src={VEDO_IMAGE_SRC} alt="Vedo" className="w-full h-full object-cover" />
                   ) : (
-                    <Film size={20} className="stroke-[2.5]" />
+                    <Film size={18} className="stroke-[2.5]" />
                   )}
                 </div>
                 <div className="text-left">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-black uppercase tracking-wider text-zinc-100 group-hover:text-yellow-400 transition-colors">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-zinc-100 group-hover:text-yellow-400 transition-colors">
                       {isVedoMode ? (
                         <>Vedo <span className="text-yellow-400">Dela</span></>
                       ) : (
@@ -1513,7 +1513,7 @@ export default function App() {
                       )}
                     </span>
                   </div>
-                  <div className="text-[10px] text-zinc-400 font-mono">
+                  <div className="text-[9px] sm:text-[10px] text-zinc-400 font-mono hidden xs:block">
                     {isVedoMode ? 'Vedo Dela Režim' : 'Katalog Ocjena'}
                   </div>
                 </div>
@@ -1521,7 +1521,7 @@ export default function App() {
 
               {/* QUICK ENTRY DROPDOWN MENU (Jump directly to any Movie/Show) */}
               {entries.filter(e => e.type !== 'universe').length > 0 && (
-                <div className="relative hidden lg:block">
+                <div className="relative hidden xl:block ml-2">
                   <select
                     value={activeEntry?.id || ''}
                     onChange={(e) => {
@@ -1544,8 +1544,8 @@ export default function App() {
               )}
             </div>
 
-            {/* TOP CENTER: FLOATING NAVIGATION TABS DOCK (Icon-only by default, expands text smoothly on hover) */}
-            <nav className="flex items-center justify-center gap-2 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl max-w-full">
+            {/* TOP CENTER: FLOATING NAVIGATION TABS DOCK (Desktop only, hidden on mobile S23) */}
+            <nav className="hidden md:flex items-center justify-center gap-1.5 lg:gap-2 bg-zinc-950/80 p-1.5 rounded-2xl border border-zinc-800/80 shadow-2xl backdrop-blur-xl max-w-full">
               {/* Magnifier Search Button - placed to the left of Home tab */}
               <button
                 type="button"
@@ -1623,15 +1623,28 @@ export default function App() {
             </nav>
 
             {/* TOP RIGHT: ACTIONS, TOOLS & USER PROFILE */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* Mobile Quick Search Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUniversalSearchOpen(true);
+                  setUniversalQuery('');
+                }}
+                className="md:hidden w-8 h-8 flex items-center justify-center bg-zinc-900/90 border border-zinc-800 text-yellow-400 hover:text-white rounded-xl shadow-sm transition-all cursor-pointer shrink-0"
+                title="Univerzalna Pretraga (Ctrl+K)"
+              >
+                <Search size={15} />
+              </button>
+
               {/* PRIMARY ACTION: ADD NEW ENTRY (Sleek Icon-Only Plus Button) */}
               <button
                 onClick={() => setIsAddModalOpen(true)}
                 id="btn-open-add-slate"
-                className="w-9 h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black rounded-xl shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:shadow-[0_0_25px_rgba(250,204,21,0.5)] hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
+                className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-gradient-to-tr from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black rounded-xl shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:shadow-[0_0_25px_rgba(250,204,21,0.5)] hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
                 title="Dodaj Novi Naslov (Film, Serija ili Univerzum)"
               >
-                <Plus size={18} strokeWidth={3} />
+                <Plus size={16} strokeWidth={3} />
               </button>
 
               {/* TOOLS DROPDOWN MENU */}
@@ -1639,19 +1652,19 @@ export default function App() {
                 <button
                   onClick={() => setIsToolsOpen(!isToolsOpen)}
                   id="btn-tools-dropdown"
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all duration-200 cursor-pointer relative ${
+                  className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-bold border transition-all duration-200 cursor-pointer relative ${
                     isToolsOpen
                       ? 'bg-zinc-800 text-white border-yellow-400/50 shadow-[0_0_15px_rgba(250,204,21,0.15)]'
                       : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white'
                   }`}
                   title="Upravljanje i dodatne alatke"
                 >
-                  <SlidersHorizontal size={15} className="text-yellow-400" />
+                  <SlidersHorizontal size={14} className="text-yellow-400" />
                   <span className="hidden sm:inline">Alati</span>
                   {availableUpdateVersion && (
                     <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)] animate-pulse" />
                   )}
-                  <ChevronDown size={14} className={`transform transition-transform duration-200 ${isToolsOpen ? 'rotate-180 text-yellow-400' : 'text-zinc-500'}`} />
+                  <ChevronDown size={13} className={`transform transition-transform duration-200 ${isToolsOpen ? 'rotate-180 text-yellow-400' : 'text-zinc-500'}`} />
                 </button>
 
                 <AnimatePresence>
@@ -2028,7 +2041,7 @@ export default function App() {
       />
 
       {/* MAIN CONTAINER */}
-      <main id="app-main-view" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8 pb-16">
+      <main id="app-main-view" className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-6 sm:space-y-8 pb-24 md:pb-16">
         
         {entries.length === 0 ? (
           <div className="p-16 text-center border border-zinc-800/80 rounded-3xl max-w-2xl mx-auto flex flex-col items-center justify-center space-y-4 transition-all bg-zinc-900/40 backdrop-blur-md shadow-2xl" id="empty-workspace-state">
@@ -2058,7 +2071,7 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 16 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="space-y-8" 
+                className="space-y-6 sm:space-y-8" 
                 id="glavni-meni-view"
               >
                 {/* VEDO TROPHY BANNER IF UNLOCKED */}
@@ -2086,33 +2099,33 @@ export default function App() {
                 )}
 
                 {/* WELCOME BANNER */}
-                <div className="relative p-6 sm:p-8 rounded-3xl overflow-hidden border border-zinc-800/80 bg-zinc-900/60 backdrop-blur-md shadow-2xl">
+                <div className="relative p-4 sm:p-8 rounded-3xl overflow-hidden border border-zinc-800/80 bg-zinc-900/60 backdrop-blur-md shadow-2xl">
                   {/* Subtle decorative mesh background */}
                   <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]" />
-                  <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div className="space-y-2 text-center md:text-left">
-                      <div className="inline-flex items-center gap-2 bg-yellow-400/10 text-yellow-400 px-3 py-1 rounded-full border border-yellow-400/20 text-[10px] font-black uppercase tracking-widest shadow-sm">
-                        <Sparkles size={11} className="animate-spin-slow" /> Cinema Grafik v2.0
+                  <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6">
+                    <div className="space-y-1.5 sm:space-y-2 text-center md:text-left">
+                      <div className="inline-flex items-center gap-2 bg-yellow-400/10 text-yellow-400 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border border-yellow-400/20 text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm">
+                        <Sparkles size={11} className="animate-spin-slow" /> Cinema Grafik
                       </div>
-                      <h2 className="text-xl sm:text-2.5xl font-black text-white tracking-tight uppercase">
-                        Dobrodošli u Vaš Cinema Grafik!
+                      <h2 className="text-lg sm:text-2.5xl font-black text-white tracking-tight uppercase">
+                        Cinema Grafik Katalog
                       </h2>
-                      <p className="text-zinc-200 text-xs sm:text-sm max-w-2xl leading-relaxed tracking-wide font-normal">
-                        Dobrodošli u centralnu bazu i vizualni katalog za ocjenjivanje vaših omiljenih filmova, serija i franšiza. Kreirajte detaljne grafikone ocjena, upravljajte glumačkim postavama, pratite trendove i izvezite svoje kataloge u samostalni HTML format!
+                      <p className="text-zinc-300 text-xs sm:text-sm max-w-2xl leading-relaxed tracking-wide font-normal">
+                        Centralna baza i vizualni katalog za ocjenjivanje filmova, serija i hronoloških univerzuma.
                       </p>
                     </div>
-                    <div className="shrink-0 flex flex-col sm:flex-row gap-3">
+                    <div className="shrink-0 flex flex-row gap-2 w-full md:w-auto justify-center">
                       <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black px-5 py-3 rounded-2xl text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(250,204,21,0.25)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer"
+                        className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-955 font-black px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(250,204,21,0.25)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer"
                       >
-                        <Plus size={15} strokeWidth={3} /> Dodaj Novi Naslov
+                        <Plus size={15} strokeWidth={3} /> Dodaj Naslov
                       </button>
                       <button
                         onClick={() => setIsSurpriseOpen(true)}
-                        className="flex items-center justify-center gap-2 bg-zinc-950/80 hover:bg-zinc-900 text-purple-300 border border-purple-500/40 px-5 py-3 rounded-2xl text-xs font-black tracking-wider uppercase hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
+                        className="flex items-center justify-center gap-1.5 bg-zinc-950/80 hover:bg-zinc-900 text-purple-300 border border-purple-500/40 px-3.5 py-2.5 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl text-xs font-black tracking-wider uppercase hover:-translate-y-0.5 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
                       >
-                        <Sparkles size={15} /> Iznenadi Me!
+                        <Sparkles size={14} /> Iznenadi Me
                       </button>
                     </div>
                   </div>
@@ -3786,6 +3799,60 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* MOBILE NATIVE BOTTOM NAVIGATION DOCK (Optimized for Android / Samsung Galaxy S23) */}
+      <nav 
+        id="mobile-bottom-dock" 
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-zinc-950/95 backdrop-blur-2xl border-t border-zinc-800/80 px-2 py-1.5 shadow-[0_-8px_30px_rgba(0,0,0,0.8)]"
+        style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom, 6px))' }}
+      >
+        <div className="flex items-center justify-around max-w-md mx-auto">
+          {[
+            { id: 'home', label: 'Meni', icon: Home },
+            { id: 'katalog', label: 'Katalog', icon: Film },
+            { id: 'univerzumi', label: 'Univerzumi', icon: Layers, badge: entries.filter(e => e.type === 'universe').length },
+            { id: 'glumci', label: 'Baza', icon: FolderKanban },
+            { id: 'leaderboard', label: 'Rang', icon: Trophy },
+            { id: 'chat', label: 'Chat', icon: MessageSquare },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isSelected = activeTab === tab.id;
+
+            return (
+              <button
+                key={`mobile-bottom-${tab.id}`}
+                onClick={() => {
+                  setActiveTab(tab.id as any);
+                  setSelectedActorName(null);
+                }}
+                className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-xl transition-all duration-200 relative min-w-[46px] cursor-pointer ${
+                  isSelected
+                    ? 'text-yellow-400 font-bold scale-105'
+                    : 'text-zinc-400 hover:text-zinc-200 active:scale-95'
+                }`}
+              >
+                <div className="relative flex items-center justify-center">
+                  <Icon size={19} className={isSelected ? 'stroke-[2.5]' : 'stroke-2'} />
+                  {tab.badge !== undefined && tab.badge > 0 && (
+                    <span className="absolute -top-1 -right-2 px-1 text-[8px] rounded-full bg-purple-500 text-white font-mono font-bold leading-none py-0.5 shadow-sm">
+                      {tab.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] mt-1 tracking-tight leading-none whitespace-nowrap">
+                  {tab.label}
+                </span>
+                {isSelected && (
+                  <motion.div
+                    layoutId="mobileActiveTabIndicator"
+                    className="w-1.5 h-1.5 rounded-full bg-yellow-400 mt-1 shadow-[0_0_8px_rgba(250,204,21,0.9)]"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
       </div> {/* CLOSING flex-1 min-w-0 flex flex-col bg-zinc-955 */}
     </div>

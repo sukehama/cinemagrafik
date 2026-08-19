@@ -19,6 +19,86 @@ async function ensureDbExists() {
 }
 
 // API Routes
+app.get("/api/omdb/config", (req, res) => {
+  const hasEnvKey = Boolean(process.env.OMDB_API_KEY && process.env.OMDB_API_KEY.trim() !== "");
+  res.json({ hasEnvKey });
+});
+
+app.get("/api/omdb/search", async (req, res) => {
+  try {
+    const query = String(req.query.query || "").trim();
+    const type = req.query.type ? String(req.query.type) : "";
+    const year = req.query.year ? String(req.query.year) : "";
+    const page = req.query.page ? String(req.query.page) : "1";
+    const userApiKey = req.headers["x-omdb-key"] as string || (req.query.apiKey ? String(req.query.apiKey) : "");
+    const apiKey = (process.env.OMDB_API_KEY && process.env.OMDB_API_KEY.trim()) || userApiKey;
+
+    if (!apiKey) {
+      return res.status(400).json({ 
+        Response: "False", 
+        Error: "OMDb API ključ nije podešen. Unesite vaš besplatni API ključ sa www.omdbapi.com u postavkama ili u okruženju." 
+      });
+    }
+
+    if (!query) {
+      return res.json({ Response: "True", Search: [], totalResults: "0" });
+    }
+
+    let url = `https://www.omdbapi.com/?apikey=${encodeURIComponent(apiKey)}&s=${encodeURIComponent(query)}&page=${page}`;
+    if (type && (type === 'movie' || type === 'series')) {
+      url += `&type=${encodeURIComponent(type)}`;
+    }
+    if (year) {
+      url += `&y=${encodeURIComponent(year)}`;
+    }
+
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    console.error("OMDb search proxy error:", error);
+    res.status(500).json({ Response: "False", Error: error.message || "Greška pri pretraživanju OMDb baze" });
+  }
+});
+
+app.get("/api/omdb/detail", async (req, res) => {
+  try {
+    const id = String(req.query.id || "").trim();
+    const title = String(req.query.title || "").trim();
+    const season = req.query.season ? String(req.query.season) : "";
+    const plot = req.query.plot ? String(req.query.plot) : "full";
+    const userApiKey = req.headers["x-omdb-key"] as string || (req.query.apiKey ? String(req.query.apiKey) : "");
+    const apiKey = (process.env.OMDB_API_KEY && process.env.OMDB_API_KEY.trim()) || userApiKey;
+
+    if (!apiKey) {
+      return res.status(400).json({ 
+        Response: "False", 
+        Error: "OMDb API ključ nije podešen." 
+      });
+    }
+
+    let url = `https://www.omdbapi.com/?apikey=${encodeURIComponent(apiKey)}&plot=${plot}`;
+    if (id) {
+      url += `&i=${encodeURIComponent(id)}`;
+    } else if (title) {
+      url += `&t=${encodeURIComponent(title)}`;
+    } else {
+      return res.status(400).json({ Response: "False", Error: "Potreban je IMDb ID (i) ili naziv (t)." });
+    }
+
+    if (season) {
+      url += `&Season=${encodeURIComponent(season)}`;
+    }
+
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    console.error("OMDb detail proxy error:", error);
+    res.status(500).json({ Response: "False", Error: error.message || "Greška pri dohvatanju detalja sa OMDb-a" });
+  }
+});
+
 app.get("/api/entries", async (req, res) => {
   try {
     await ensureDbExists();

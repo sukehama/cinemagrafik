@@ -88,8 +88,6 @@ export default function UniversesView({
   const [addItemCustomRating, setAddItemCustomRating] = useState<number>(8.0);
   const [addItemCustomImage, setAddItemCustomImage] = useState<string>('');
 
-  const MAX_ITEMS_PER_PHASE = 50;
-
   const universeEntries = useMemo(() => entries.filter(e => e.type === 'universe'), [entries]);
   const activeUniverse = universeEntries.find(u => u.id === selectedUniverseId) || universeEntries[0] || null;
 
@@ -121,12 +119,6 @@ export default function UniversesView({
     const currentSeasons = activeUniverse.seasons || [];
     const targetSeason = currentSeasons[addingToPhaseIndex];
     if (!targetSeason) return;
-
-    // Check for maximum 50 items limit per phase
-    if (targetSeason.episodes.length >= MAX_ITEMS_PER_PHASE) {
-      alert(`Maksimalan broj stavki po fazi je ${MAX_ITEMS_PER_PHASE}! Ova faza je već popunjena.`);
-      return;
-    }
 
     let newItemName = '';
     let newItemOverview = '';
@@ -448,7 +440,7 @@ export default function UniversesView({
               Cinematic Univerzumi & Hronološke Franšize
             </h2>
             <p className="text-zinc-300 text-xs sm:text-sm leading-relaxed">
-              Spajajte više povezanih filmova, serija i faza u kohezivnu hronologiju do 50 stavki po fazi. Uređujte stackove, povezujte postojeće naslove i pratite hronologiju priče.
+              Spajajte više povezanih filmova, serija i faza u kohezivnu hronologiju bez ograničenja broja stavki po fazi. Uređujte stackove, povezujte postojeće naslove i pratite hronologiju priče.
             </p>
           </div>
 
@@ -772,7 +764,7 @@ export default function UniversesView({
                         >
                           <span>{phase.seasonName || `Faza ${phase.seasonNumber}`}</span>
                           <span className={`px-1 py-0.2 rounded font-mono text-[9px] ${isFiltered ? 'bg-purple-900/60 text-purple-200' : 'bg-zinc-900 text-zinc-500'}`}>
-                            {phase.episodes.length}/50
+                            {phase.episodes.length}
                           </span>
                         </button>
                       );
@@ -803,7 +795,7 @@ export default function UniversesView({
                     {/* New Phase creation bar */}
                     {isAddingPhase && (
                       <div className="bg-zinc-950 p-4 rounded-2xl border border-purple-500/40 space-y-3">
-                        <div className="text-xs font-bold text-purple-300 uppercase">Dodaj novu fazu ili stack (do 50 stavki po fazi)</div>
+                        <div className="text-xs font-bold text-purple-300 uppercase">Dodaj novu fazu ili stack</div>
                         <div className="flex gap-2">
                           <input
                             type="text"
@@ -854,7 +846,7 @@ export default function UniversesView({
                                 {phase.seasonName || `Faza ${phase.seasonNumber}`}
                               </h4>
                               <span className="text-[10px] font-mono font-black text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
-                                {phase.episodes.length}/50 stavki
+                                {phase.episodes.length} stavki
                               </span>
                             </div>
 
@@ -869,16 +861,12 @@ export default function UniversesView({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      if (phase.episodes.length >= MAX_ITEMS_PER_PHASE) {
-                                        alert(`Maksimalan broj stavki po fazi je ${MAX_ITEMS_PER_PHASE}! Ova faza je već popunjena.`);
-                                        return;
-                                      }
                                       setAddingToPhaseIndex(actualPhaseIdx);
                                     }}
                                     className="px-2.5 py-1 bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 rounded-lg text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-sm"
                                     title="Dodaj novu stavku u ovu fazu"
                                   >
-                                    <Plus size={11} /> Dodaj ({phase.episodes.length}/50)
+                                    <Plus size={11} /> Dodaj stavku
                                   </button>
                                   <button
                                     type="button"
@@ -901,7 +889,7 @@ export default function UniversesView({
                             <div className="space-y-2 pt-1 animate-fade-in">
                               {phase.episodes.length === 0 ? (
                                 <div className="p-5 text-center border border-dashed border-zinc-850 rounded-xl text-zinc-500 text-xs">
-                                  Ova faza nema unesenih stavki. Kliknite "Dodaj stavku" za unos (do 50 stavki).
+                                  Ova faza nema unesenih stavki. Kliknite "Dodaj stavku" za unos novog naslova ili projekta.
                                 </div>
                               ) : visibleEpisodes.length === 0 ? (
                                 <div className="p-4 text-center border border-zinc-850/50 rounded-xl text-zinc-500 text-xs">
@@ -1094,13 +1082,13 @@ export default function UniversesView({
                                 </div>
                               )}
 
-                              {onUpdateUniverse && phase.episodes.length < MAX_ITEMS_PER_PHASE && (
+                              {onUpdateUniverse && (
                                 <button
                                   type="button"
                                   onClick={() => setAddingToPhaseIndex(actualPhaseIdx)}
                                   className="w-full py-2 border border-dashed border-zinc-800 hover:border-purple-500/50 bg-zinc-900/30 hover:bg-zinc-900/80 rounded-xl text-zinc-400 hover:text-purple-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
                                 >
-                                  <Plus size={13} /> Dodaj novu stavku u {phase.seasonName || `Fazu ${phase.seasonNumber}`} ({phase.episodes.length}/50)
+                                  <Plus size={13} /> Dodaj novu stavku u {phase.seasonName || `Fazu ${phase.seasonNumber}`} ({phase.episodes.length} stavki)
                                 </button>
                               )}
                             </div>
@@ -1417,7 +1405,7 @@ export default function UniversesView({
                       Dodaj Stavku u Fazu #{addingToPhaseIndex + 1}
                     </h3>
                     <p className="text-[10px] text-zinc-400">
-                      {activeUniverse.seasons?.[addingToPhaseIndex]?.seasonName || `Faza ${addingToPhaseIndex + 1}`} • Max 50 stavki ({activeUniverse.seasons?.[addingToPhaseIndex]?.episodes.length || 0}/50)
+                      {activeUniverse.seasons?.[addingToPhaseIndex]?.seasonName || `Faza ${addingToPhaseIndex + 1}`} • {activeUniverse.seasons?.[addingToPhaseIndex]?.episodes.length || 0} stavki
                     </p>
                   </div>
                 </div>

@@ -1,7 +1,7 @@
 {
   "name": "CinemaGrafik",
   "private": true,
-  "version": "0.3.9",
+  "version": "0.4.1",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -12,6 +12,9 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@tauri-apps/plugin-process": "^2.3.1",
