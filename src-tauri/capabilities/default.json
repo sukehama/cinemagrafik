@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for desktop window",
+  "description": "Capability for main window",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "updater:allow-check",
-    "updater:allow-download-and-install"
+    "log:default",
+    "process:default",
+    "updater:default"
   ]
 }
