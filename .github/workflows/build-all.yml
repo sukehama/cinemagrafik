@@ -36,7 +36,7 @@ jobs:
           releaseDraft: true
           prerelease: false
 
-  # 2. BUILD ANDROID APK
+# 2. BUILD ANDROID APK
   build-android:
     needs: build-windows
     permissions:
@@ -76,11 +76,21 @@ jobs:
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
 
-      - name: Attach APK to Draft Release
+      - name: Sign Android APK
+        uses: rsksetup/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: src-tauri/gen/android/app/build/outputs/apk/universal/release
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Attach Signed APK to Draft Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           tag_name: v1.0.0-${{ github.run_number }}
-          files: src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+          files: ${{ steps.sign_app.outputs.signedFile }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

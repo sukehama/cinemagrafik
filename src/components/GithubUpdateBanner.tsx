@@ -265,77 +265,72 @@ export default function GithubUpdateBanner({
     };
   }, [checkForUpdates]);
 
-  // Execute update installation
+  // Execute update download / manual install
   const handleInstallUpdate = async () => {
-    setIsInstalling(true);
-    setInstallProgress(15);
-    setInstallStatusText('Preuzimanje najnovijeg izdanja sa GitHub repozitorija...');
+    // 1. Find direct .exe, .msi, .zip or main release asset if available
+    let downloadUrl: string | null = null;
+    let assetName = '';
 
-    // If native Tauri updater object exists, execute Tauri download and relaunch
-    if (tauriUpdateObj) {
-      try {
-        setInstallProgress(40);
-        setInstallStatusText('Preuzimanje i primjena Tauri desktop ažuriranja...');
-        await tauriUpdateObj.downloadAndInstall((progress: any) => {
-          if (progress && progress.total && progress.downloaded) {
-            const pct = Math.round((progress.downloaded / progress.total) * 100);
-            setInstallProgress(pct);
-          }
-        });
-        setInstallProgress(100);
-        setInstallStatusText('Ažuriranje uspješno instalirano! Ponovno pokretanje aplikacije...');
-        
-        if (latestRelease?.tag_name) {
-          localStorage.setItem(STORAGE_KEY_INSTALLED_TAG, latestRelease.tag_name);
-        }
-        
-        setTimeout(async () => {
-          await relaunch();
-        }, 1500);
-        return;
-      } catch (err) {
-        console.error('Tauri install error:', err);
-        setInstallStatusText('Greška pri direktnom ažuriranju. Preuzimanje putem web pretraživača...');
+    if (latestRelease?.assets && latestRelease.assets.length > 0) {
+      // Prioritize windows executable / installer
+      const exeAsset = latestRelease.assets.find(a => 
+        a.name.toLowerCase().endsWith('.exe') || 
+        a.name.toLowerCase().endsWith('.msi') ||
+        a.name.toLowerCase().endsWith('.zip')
+      );
+      if (exeAsset) {
+        downloadUrl = exeAsset.browser_download_url;
+        assetName = exeAsset.name;
+      } else {
+        downloadUrl = latestRelease.assets[0].browser_download_url;
+        assetName = latestRelease.assets[0].name;
       }
     }
 
-    // Web / Standard update sequence with simulation and cache reload
-    setTimeout(() => {
-      setInstallProgress(50);
-      setInstallStatusText('Verifikacija programskog koda i primjena novih funkcija...');
-    }, 700);
+    // Fallback to GitHub Release HTML page
+    if (!downloadUrl) {
+      downloadUrl = latestRelease?.html_url || latestCommit?.html_url || `https://github.com/${repoOwner}/${repoName}/releases/latest`;
+    }
+
+    setIsInstalling(true);
+    setInstallProgress(100);
+    setInstallStatusText(assetName ? `Preuzimanje fajla: ${assetName}...` : 'Otvaranje stranice za preuzimanje...');
+
+    // Mark as updated in local storage
+    try {
+      if (latestRelease?.tag_name) {
+        localStorage.setItem(STORAGE_KEY_INSTALLED_TAG, latestRelease.tag_name);
+        setInstalledTag(latestRelease.tag_name);
+      }
+      if (latestCommit?.sha) {
+        localStorage.setItem(STORAGE_KEY_INSTALLED_SHA, latestCommit.sha);
+        setInstalledSha(latestCommit.sha);
+      }
+      localStorage.removeItem(STORAGE_KEY_BANNER_DISMISSED);
+    } catch {}
+
+    // Trigger instant browser download or open in new tab
+    if (typeof window !== 'undefined' && downloadUrl) {
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      if (assetName) {
+        link.download = assetName;
+      }
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
 
     setTimeout(() => {
-      setInstallProgress(85);
-      setInstallStatusText('Kompajliranje novih komponenti i osvježavanje keša...');
-    }, 1500);
-
-    setTimeout(() => {
-      setInstallProgress(100);
-      setInstallStatusText('Ažuriranje uspješno primijenjeno!');
-
-      try {
-        if (latestRelease?.tag_name) {
-          localStorage.setItem(STORAGE_KEY_INSTALLED_TAG, latestRelease.tag_name);
-          setInstalledTag(latestRelease.tag_name);
-        }
-        if (latestCommit?.sha) {
-          localStorage.setItem(STORAGE_KEY_INSTALLED_SHA, latestCommit.sha);
-          setInstalledSha(latestCommit.sha);
-        }
-        localStorage.removeItem(STORAGE_KEY_BANNER_DISMISSED);
-      } catch {}
-
       setIsInstalling(false);
       setIsInstallSuccess(true);
-
       setTimeout(() => {
         setIsInstallSuccess(false);
         setHasUpdate(false);
-        // Force refresh application state
-        window.location.reload();
-      }, 1500);
-    }, 2400);
+      }, 3000);
+    }, 1000);
   };
 
   const handleDismiss = () => {
@@ -446,24 +441,24 @@ export default function GithubUpdateBanner({
                 {/* Primary Update Button */}
                 <button
                   onClick={handleInstallUpdate}
-                  disabled={isInstalling || isInstallSuccess}
+                  disabled={isInstalling}
                   id="btn-install-release-update"
                   className="flex items-center gap-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 hover:from-blue-400 hover:to-indigo-400 text-white font-black px-4 py-1.5 rounded-xl shadow-[0_0_20px_rgba(59,130,246,0.4)] hover:scale-105 active:scale-95 transition-all cursor-pointer disabled:opacity-50 text-xs tracking-wide"
                 >
                   {isInstalling ? (
                     <>
                       <RefreshCw size={13} className="animate-spin" />
-                      <span>Instaliranje ({installProgress}%)...</span>
+                      <span>Preuzimanje...</span>
                     </>
                   ) : isInstallSuccess ? (
                     <>
                       <CheckCircle2 size={13} className="text-emerald-300" />
-                      <span>Ažurirano!</span>
+                      <span>Preuzeto!</span>
                     </>
                   ) : (
                     <>
                       <Download size={13} />
-                      <span>Ažuriraj na {releaseVersion}</span>
+                      <span>Preuzmi {releaseVersion} (.exe)</span>
                     </>
                   )}
                 </button>
@@ -585,7 +580,7 @@ export default function GithubUpdateBanner({
                     className="px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-400 hover:to-indigo-400 text-white shadow-lg shadow-blue-500/20 transition cursor-pointer flex items-center gap-1.5"
                   >
                     <Download size={14} />
-                    <span>Instaliraj Ažuriranje</span>
+                    <span>Preuzmi Izdanje (.exe)</span>
                   </button>
                 </div>
               </div>

@@ -45,7 +45,15 @@ export default function BazaView({
   const [projects, setProjects] = useState<ProjectFolder[]>(() => {
     try {
       const saved = localStorage.getItem('baza_projekti_v1');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map((p: any) => ({
+            ...p,
+            items: Array.isArray(p.items) ? p.items.map((it: any) => ({ ...it, rating: Number(it.rating) || 0 })) : []
+          }));
+        }
+      }
     } catch (e) {
       console.error(e);
     }
@@ -88,8 +96,36 @@ export default function BazaView({
 
   // Save projects to localStorage
   useEffect(() => {
-    localStorage.setItem('baza_projekti_v1', JSON.stringify(projects));
+    try {
+      localStorage.setItem('baza_projekti_v1', JSON.stringify(projects));
+    } catch (e) {
+      console.error('Failed to save projects to localStorage:', e);
+    }
   }, [projects]);
+
+  // Listen for external sync or JSON import updates
+  useEffect(() => {
+    const handleProjectsUpdated = (ev: any) => {
+      try {
+        const updatedProjects = ev?.detail;
+        if (Array.isArray(updatedProjects)) {
+          setProjects(updatedProjects);
+        } else {
+          const saved = localStorage.getItem('baza_projekti_v1');
+          if (saved) {
+            setProjects(JSON.parse(saved));
+          }
+        }
+      } catch (e) {
+        console.error('Error refreshing projects from event:', e);
+      }
+    };
+
+    window.addEventListener('baza_projekti_updated', handleProjectsUpdated);
+    return () => {
+      window.removeEventListener('baza_projekti_updated', handleProjectsUpdated);
+    };
+  }, []);
 
   // Active Project Data
   const activeProject = useMemo(() => {
@@ -98,36 +134,38 @@ export default function BazaView({
   }, [projects, activeProjectId]);
 
   // Calculate Average Rating for a Project Folder
-  const calculateProjectRating = (items: ProjectItem[]): number => {
-    if (!items || items.length === 0) return 0;
-    const ratedItems = items.filter(i => i.rating > 0);
+  const calculateProjectRating = (items?: ProjectItem[]): number => {
+    if (!items || !Array.isArray(items) || items.length === 0) return 0;
+    const ratedItems = items.filter(i => i && typeof i.rating !== 'undefined' && Number(i.rating) > 0);
     if (ratedItems.length === 0) return 0;
-    const sum = ratedItems.reduce((acc, curr) => acc + curr.rating, 0);
+    const sum = ratedItems.reduce((acc, curr) => acc + (Number(curr.rating) || 0), 0);
     return Math.round((sum / ratedItems.length) * 10) / 10;
   };
 
   // Helper to get Rating Color
   const getRatingColor = (rating: number) => {
-    if (rating >= 9.0) return 'text-amber-400 stroke-amber-400 fill-amber-400/20';
-    if (rating >= 8.0) return 'text-emerald-400 stroke-emerald-400 fill-emerald-400/20';
-    if (rating >= 7.0) return 'text-sky-400 stroke-sky-400 fill-sky-400/20';
-    if (rating >= 5.0) return 'text-yellow-500 stroke-yellow-500 fill-yellow-500/20';
+    const num = Number(rating) || 0;
+    if (num >= 9.0) return 'text-amber-400 stroke-amber-400 fill-amber-400/20';
+    if (num >= 8.0) return 'text-emerald-400 stroke-emerald-400 fill-emerald-400/20';
+    if (num >= 7.0) return 'text-sky-400 stroke-sky-400 fill-sky-400/20';
+    if (num >= 5.0) return 'text-yellow-500 stroke-yellow-500 fill-yellow-500/20';
     return 'text-rose-400 stroke-rose-400 fill-rose-400/20';
   };
 
   // Circular Rating Ring Component
   const CircularRatingGauge = ({ rating, size = 64, strokeWidth = 5 }: { rating: number; size?: number; strokeWidth?: number }) => {
+    const numRating = Number(rating) || 0;
     const radius = (size - strokeWidth * 2) / 2;
     const circumference = radius * 2 * Math.PI;
-    const progress = rating > 0 ? (rating / 10) * circumference : 0;
+    const progress = numRating > 0 ? (Math.min(10, numRating) / 10) * circumference : 0;
     const strokeDashoffset = circumference - progress;
 
     let colorClass = '#f59e0b';
-    if (rating >= 9.0) colorClass = '#fbbf24';
-    else if (rating >= 8.0) colorClass = '#34d399';
-    else if (rating >= 7.0) colorClass = '#38bdf8';
-    else if (rating >= 5.0) colorClass = '#eab308';
-    else if (rating > 0) colorClass = '#f43f5e';
+    if (numRating >= 9.0) colorClass = '#fbbf24';
+    else if (numRating >= 8.0) colorClass = '#34d399';
+    else if (numRating >= 7.0) colorClass = '#38bdf8';
+    else if (numRating >= 5.0) colorClass = '#eab308';
+    else if (numRating > 0) colorClass = '#f43f5e';
     else colorClass = '#71717a';
 
     return (
@@ -156,7 +194,7 @@ export default function BazaView({
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
           <span className="text-xs sm:text-sm font-black font-mono tracking-tighter text-white">
-            {rating > 0 ? rating.toFixed(1) : '—'}
+            {numRating > 0 ? numRating.toFixed(1) : '—'}
           </span>
           <span className="text-[7px] font-mono text-zinc-400 uppercase leading-none">OCJENA</span>
         </div>
@@ -199,14 +237,14 @@ export default function BazaView({
         return {
           ...p,
           updatedAt: new Date().toISOString(),
-          items: p.items.filter(i => i.id !== itemId)
+          items: (p.items || []).filter(i => i && i.id !== itemId)
         };
       }
       return p;
     }));
   };
 
-  // Extract all available selectable items from catalog (movies + all episodes of all seasons of all shows)
+  // Extract all available selectable items from catalog (movies + all episodes of all seasons of all shows + universes)
   const selectableCatalogItems = useMemo(() => {
     const itemsList: {
       id: string;
@@ -221,31 +259,55 @@ export default function BazaView({
       year?: string | number;
     }[] = [];
 
+    if (!Array.isArray(entries)) return itemsList;
+
     entries.forEach(entry => {
+      if (!entry) return;
       if (entry.type === 'movie') {
         itemsList.push({
           id: entry.id,
           entryId: entry.id,
-          entryName: entry.name,
+          entryName: entry.name || 'Film',
           type: 'movie',
           posterUrl: entry.posterUrl,
-          rating: entry.movieRating || 0,
+          rating: Number(entry.movieRating) || 0,
           year: entry.year
         });
       } else if (entry.type === 'show') {
         (entry.seasons || []).forEach(season => {
+          if (!season) return;
           (season.episodes || []).forEach(ep => {
+            if (!ep) return;
             itemsList.push({
               id: `${entry.id}-s${season.seasonNumber}-e${ep.episodeNumber}`,
               entryId: entry.id,
-              entryName: entry.name,
+              entryName: entry.name || 'Serija',
               type: 'episode',
               posterUrl: ep.imageUrl || entry.posterUrl,
               seasonNum: season.seasonNumber,
               epNum: ep.episodeNumber,
-              epName: ep.name,
-              rating: ep.rating || 0,
+              epName: ep.name || `Epizoda ${ep.episodeNumber}`,
+              rating: Number(ep.rating) || 0,
               year: ep.releaseYear || entry.year
+            });
+          });
+        });
+      } else if (entry.type === 'universe') {
+        (entry.seasons || []).forEach(phase => {
+          if (!phase) return;
+          (phase.episodes || []).forEach(item => {
+            if (!item) return;
+            itemsList.push({
+              id: `${entry.id}-f${phase.seasonNumber}-item${item.episodeNumber}`,
+              entryId: entry.id,
+              entryName: `${entry.name || 'Univerzum'} (${phase.seasonName || `Faza ${phase.seasonNumber}`})`,
+              type: 'episode',
+              posterUrl: item.imageUrl || entry.posterUrl,
+              seasonNum: phase.seasonNumber,
+              epNum: item.episodeNumber,
+              epName: item.name || `Stavka ${item.episodeNumber}`,
+              rating: Number(item.rating) || 0,
+              year: item.releaseYear || entry.year
             });
           });
         });
@@ -267,7 +329,7 @@ export default function BazaView({
     const q = bulkSearchQuery.toLowerCase().trim();
     if (!q) return list;
     return list.filter(i => 
-      i.entryName.toLowerCase().includes(q) || 
+      (i.entryName && i.entryName.toLowerCase().includes(q)) || 
       (i.epName && i.epName.toLowerCase().includes(q))
     );
   }, [selectableCatalogItems, bulkFilterType, bulkSearchQuery]);
@@ -281,16 +343,17 @@ export default function BazaView({
     setProjects(prev => prev.map(p => {
       if (p.id === activeProjectId) {
         // Prevent duplicates
-        const existingIds = new Set(p.items.map(i => i.id));
+        const existingIds = new Set((p.items || []).map(i => i?.id).filter(Boolean));
         const newItems = itemsToAdd.filter(i => !existingIds.has(i.id)).map(i => ({
           ...i,
+          rating: Number(i.rating) || 0,
           addedAt: new Date().toISOString()
         }));
 
         return {
           ...p,
           updatedAt: new Date().toISOString(),
-          items: [...p.items, ...newItems]
+          items: [...(p.items || []), ...newItems]
         };
       }
       return p;
@@ -626,7 +689,7 @@ export default function BazaView({
                           }
                         </span>
                         <span className="text-[9px] text-zinc-400 block">
-                          Ukupno {activeProject?.items.length || 0} stavki
+                          Ukupno {(activeProject?.items || []).length} stavki
                         </span>
                       </div>
                     </div>
@@ -642,7 +705,7 @@ export default function BazaView({
                 </div>
 
                 {/* Items List in this project */}
-                {activeProject?.items.length === 0 ? (
+                {(!activeProject?.items || activeProject.items.length === 0) ? (
                   <div className="text-center py-16 bg-zinc-900/30 border border-dashed border-zinc-800 rounded-3xl space-y-4">
                     <Layers className="w-12 h-12 text-zinc-600 mx-auto" />
                     <div>
@@ -661,9 +724,9 @@ export default function BazaView({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {activeProject?.items.map((item, idx) => (
+                    {(activeProject.items || []).filter(Boolean).map((item, idx) => (
                       <div
-                        key={item.id}
+                        key={item.id || `proj-item-${idx}`}
                         className="bg-zinc-900/80 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-400/40 rounded-2xl p-4 flex gap-3.5 transition-all shadow-md group relative"
                       >
                         {/* Poster thumbnail */}
@@ -671,7 +734,7 @@ export default function BazaView({
                           {item.posterUrl ? (
                             <img
                               src={item.posterUrl}
-                              alt={item.entryName}
+                              alt={item.entryName || ''}
                               className="w-full h-full object-cover"
                               referrerPolicy="no-referrer"
                             />
@@ -694,20 +757,20 @@ export default function BazaView({
                                   ? 'bg-emerald-950 text-emerald-400 border border-emerald-900/50' 
                                   : 'bg-sky-950 text-sky-400 border border-sky-900/50'
                               }`}>
-                                {item.type === 'episode' ? `S${item.seasonNum} E${item.epNum}` : 'Film'}
+                                {item.type === 'episode' ? `S${item.seasonNum || 1} E${item.epNum || 1}` : 'Film'}
                               </span>
 
                               {/* Rating badge */}
                               <div className="flex items-center gap-1 text-[11px] font-mono font-black text-yellow-400">
                                 <Star size={11} className="fill-current" />
-                                <span>{item.rating > 0 ? item.rating.toFixed(1) : '—'}</span>
+                                <span>{Number(item.rating) > 0 ? Number(item.rating).toFixed(1) : '—'}</span>
                               </div>
                             </div>
 
                             <h4 className="text-xs font-black text-white group-hover:text-amber-300 transition-colors line-clamp-1 mt-1">
                               {item.type === 'episode' && item.epName ? item.epName : item.entryName}
                             </h4>
-                            {item.type === 'episode' && (
+                            {item.type === 'episode' && item.entryName && (
                               <p className="text-[10px] text-zinc-400 line-clamp-1">
                                 {item.entryName}
                               </p>
@@ -872,10 +935,10 @@ export default function BazaView({
                             <div className="flex-1 overflow-hidden">
                               <div className="flex items-center justify-between">
                                 <span className={`text-[8px] font-black uppercase px-1 py-0.5 rounded ${item.type === 'episode' ? 'bg-emerald-950 text-emerald-400' : 'bg-sky-950 text-sky-400'}`}>
-                                  {item.type === 'episode' ? `S${item.seasonNum}E${item.epNum}` : 'Film'}
+                                  {item.type === 'episode' ? `S${item.seasonNum || 1}E${item.epNum || 1}` : 'Film'}
                                 </span>
                                 <span className="text-[10px] font-mono font-bold text-yellow-400">
-                                  ★ {item.rating > 0 ? item.rating.toFixed(1) : '—'}
+                                  ★ {Number(item.rating) > 0 ? Number(item.rating).toFixed(1) : '—'}
                                 </span>
                               </div>
                               <h5 className="text-xs font-black text-white line-clamp-1 mt-0.5">

@@ -95,6 +95,10 @@ export interface RatingEntry {
   movieRating?: number;
   movieYoutubeUrl?: string;
   movieDuration?: string;
+
+  // Source metadata for catalog separation
+  source?: 'local' | 'imdb';
+  imdbId?: string;
 }
 
 export type SortKey = 'name' | 'rating' | 'year';

@@ -21,6 +21,7 @@ interface ActorsViewProps {
       epNum?: number;
       epName?: string;
       rawActor: Actor;
+      source?: 'local' | 'imdb';
     }[];
   }[];
   selectedActorName: string | null;
@@ -55,6 +56,7 @@ export default function ActorsView({
     ];
   });
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'imdb'>('local');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [openFolderActorName, setOpenFolderActorName] = useState<string | null>(null);
@@ -62,6 +64,24 @@ export default function ActorsView({
   useEffect(() => {
     localStorage.setItem('actor_folders_v1', JSON.stringify(folders));
   }, [folders]);
+
+  useEffect(() => {
+    const handleFoldersUpdated = (ev: any) => {
+      try {
+        const updated = ev?.detail;
+        if (Array.isArray(updated)) {
+          setFolders(updated);
+        } else {
+          const saved = localStorage.getItem('actor_folders_v1');
+          if (saved) setFolders(JSON.parse(saved));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    window.addEventListener('actor_folders_updated', handleFoldersUpdated);
+    return () => window.removeEventListener('actor_folders_updated', handleFoldersUpdated);
+  }, []);
 
   // Actor edit form states
   const [isEditing, setIsEditing] = useState(false);
@@ -150,9 +170,17 @@ export default function ActorsView({
     setIsEditing(false);
   };
 
-  // Filter list of all actors by search query and folder
+  // Filter list of all actors by search query, folder and source
   const filteredActors = useMemo(() => {
     let list = allActorsWithAppearances;
+
+    if (sourceFilter !== 'all') {
+      list = list.filter(a => {
+        const hasLocal = a.appearances.some(app => app.source === 'local' || (!app.source && !app.entryId.startsWith('imdb_')));
+        const hasImdb = a.appearances.some(app => app.source === 'imdb' || app.entryId.startsWith('imdb_'));
+        return sourceFilter === 'imdb' ? hasImdb : hasLocal;
+      });
+    }
 
     if (selectedFolderId !== 'all') {
       const activeFolder = folders.find(f => f.id === selectedFolderId);
@@ -170,7 +198,7 @@ export default function ActorsView({
       (a.actor.characterName && a.actor.characterName.toLowerCase().includes(q)) ||
       a.appearances.some(app => app.entryName.toLowerCase().includes(q))
     );
-  }, [allActorsWithAppearances, searchQuery, selectedFolderId, folders]);
+  }, [allActorsWithAppearances, searchQuery, selectedFolderId, folders, sourceFilter]);
 
   return (
     <div className="space-y-6" id="actors-database-panel">
@@ -211,17 +239,64 @@ export default function ActorsView({
               </div>
             </div>
 
+            {/* CATEGORY & FOLDERS BAR */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
+              {/* Source Category Filter */}
+              <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-2xl border border-zinc-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSourceFilter('local')}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    sourceFilter === 'local'
+                      ? 'bg-yellow-400 text-zinc-955 font-black shadow-sm'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <span>🏠</span>
+                  <span>Lokalno</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceFilter('imdb')}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    sourceFilter === 'imdb'
+                      ? 'bg-yellow-400 text-zinc-955 font-black shadow-sm'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <span>🎬</span>
+                  <span>IMDb / TMDB</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceFilter('all')}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    sourceFilter === 'all'
+                      ? 'bg-yellow-400 text-zinc-955 font-black shadow-sm'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  Svi ({allActorsWithAppearances.length})
+                </button>
+              </div>
+
+              {/* Total actors count for active filter */}
+              <span className="text-[11px] font-mono text-zinc-500 font-bold">
+                Prikazano: <strong className="text-zinc-300">{filteredActors.length}</strong> glumaca
+              </span>
+            </div>
+
             {/* FOLDERS / GROUPS NAVIGATION BAR */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
               <button
                 onClick={() => setSelectedFolderId('all')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                   selectedFolderId === 'all'
-                    ? 'bg-yellow-400 text-zinc-955 shadow-md shadow-yellow-400/20 font-black'
+                    ? 'bg-zinc-800 text-yellow-400 border border-yellow-400/40 font-black'
                     : 'bg-zinc-900/80 text-zinc-400 hover:text-white border border-zinc-800'
                 }`}
               >
-                <Layers size={14} /> Svi Glumci ({allActorsWithAppearances.length})
+                <Layers size={14} /> Svi Folderi
               </button>
 
               {folders.map(f => {

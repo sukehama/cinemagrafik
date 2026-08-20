@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { RatingEntry, Episode, Season, SortKey, SortOrder, Actor } from './types';
+import { RatingEntry, Episode, Season, SortKey, SortOrder, Actor, TrophyItem, ProjectFolder, ProjectItem } from './types';
 import { DEFAULT_ENTRIES } from './data';
 import { getEntriesFromDB, saveEntriesToDB } from './db';
 import { calculateAverageRating, calculatePersonalRating, calculateTotalVotes, calculateCombinedAverageRating, getRatingColorClass, getShowDynamicColors, getEntryAtmosphere } from './utils';
@@ -17,6 +17,9 @@ import BulkEditModal from './components/BulkEditModal';
 import ActorsView from './components/ActorsView';
 import BazaView from './components/BazaView';
 import LeaderboardView from './components/LeaderboardView';
+import ImdbExplorerView from './components/ImdbExplorerView';
+import { ApiKeysModal } from './components/ApiKeysModal';
+import ErrorBoundary from './components/ErrorBoundary';
 import UserProfileModal from './components/UserProfileModal';
 import UniversesView from './components/UniversesView';
 import CinematicIntro from './components/CinematicIntro';
@@ -79,7 +82,8 @@ import {
   SlidersHorizontal,
   MoreVertical,
   MessageSquare,
-  FolderKanban
+  FolderKanban,
+  Globe
 } from 'lucide-react';
 
 export default function App() {
@@ -163,6 +167,7 @@ export default function App() {
   const [exportInitialTab, setExportInitialTab] = useState<'web-html' | 'json-backup'>('web-html');
   const [isSurpriseOpen, setIsSurpriseOpen] = useState(false);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [selectedEpisode, setSelectedEpisode] = useState<{ seasonNum: number; episode: Episode } | null>(null);
 
@@ -172,7 +177,8 @@ export default function App() {
   const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   // Main Tab Navigation & Sidebar collapsible state
-  const [activeTab, setActiveTab] = useState<'home' | 'katalog' | 'univerzumi' | 'glumci' | 'leaderboard' | 'chat'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'katalog' | 'univerzumi' | 'glumci' | 'imdb' | 'leaderboard' | 'chat'>('home');
+  const [katalogSourceFilter, setKatalogSourceFilter] = useState<'all' | 'local' | 'imdb'>('local');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
     const saved = localStorage.getItem('cinema-sidebar-expanded');
     return saved !== 'false';
@@ -513,38 +519,50 @@ export default function App() {
 
   // Get unique existing actors across all media along with all of their appearances/roles
   const allActorsWithAppearances = useMemo(() => {
-    const map = new Map<string, { actor: Actor; appearances: { entryId: string; entryName: string; type: 'show' | 'movie'; seasonNum?: number; epNum?: number; epName?: string; rawActor: Actor }[] }>();
+    const map = new Map<string, { actor: Actor; appearances: { entryId: string; entryName: string; type: 'show' | 'movie'; seasonNum?: number; epNum?: number; epName?: string; rawActor: Actor; source: 'local' | 'imdb' }[] }>();
     
-    entries.filter(e => e.type !== 'universe').forEach(entry => {
+    if (!Array.isArray(entries)) return [];
+
+    entries.filter(e => e && e.type !== 'universe').forEach(entry => {
+      const entrySource: 'local' | 'imdb' = (entry.source === 'imdb' || entry.id?.startsWith('imdb_') || Boolean(entry.imdbId)) ? 'imdb' : 'local';
+
       if (entry.type === 'movie') {
         (entry.movieActors || []).forEach(act => {
+          if (!act || !act.name || typeof act.name !== 'string') return;
           const key = act.name.trim().toLowerCase();
+          if (!key) return;
           if (!map.has(key)) {
             map.set(key, { actor: act, appearances: [] });
           }
           map.get(key)!.appearances.push({
             entryId: entry.id,
-            entryName: entry.name,
+            entryName: entry.name || 'Film',
             type: 'movie',
-            rawActor: act
+            rawActor: act,
+            source: entrySource
           });
         });
       } else {
         (entry.seasons || []).forEach(s => {
+          if (!s) return;
           (s.episodes || []).forEach(ep => {
+            if (!ep) return;
             (ep.actors || []).forEach(act => {
+              if (!act || !act.name || typeof act.name !== 'string') return;
               const key = act.name.trim().toLowerCase();
+              if (!key) return;
               if (!map.has(key)) {
                 map.set(key, { actor: act, appearances: [] });
               }
               map.get(key)!.appearances.push({
                 entryId: entry.id,
-                entryName: entry.name,
+                entryName: entry.name || 'Serija',
                 type: 'show',
                 seasonNum: s.seasonNumber,
                 epNum: ep.episodeNumber,
                 epName: ep.name,
-                rawActor: act
+                rawActor: act,
+                source: entrySource
               });
             });
           });
@@ -552,7 +570,7 @@ export default function App() {
       }
     });
     
-    return Array.from(map.values()).sort((a, b) => a.actor.name.localeCompare(b.actor.name));
+    return Array.from(map.values()).sort((a, b) => (a.actor?.name || '').localeCompare(b.actor?.name || ''));
   }, [entries]);
 
   // Universal Search event listener for Ctrl+K, Cmd+K, and "/"
@@ -579,33 +597,37 @@ export default function App() {
     if (!query) return { entries: [], actors: [], episodes: [], profiles: [] };
 
     // 1. Match movies, shows, universes
-    const matchedEntries = entries.filter(e => e.name.toLowerCase().includes(query) || e.description.toLowerCase().includes(query));
+    const matchedEntries = (entries || []).filter(e => 
+      e && ((e.name && e.name.toLowerCase().includes(query)) || (e.description && e.description.toLowerCase().includes(query)))
+    );
 
     // 2. Match actors (by name, primary characterName, or specific role/episode names)
     const matchedActors = allActorsWithAppearances.filter(a => {
+      if (!a.actor || !a.actor.name) return false;
       const nameMatch = a.actor.name.toLowerCase().includes(query);
-      const characterMatch = a.actor.characterName && a.actor.characterName.toLowerCase().includes(query);
-      const hasInRoles = a.appearances.some(app => 
-        (app.rawActor.characterName && app.rawActor.characterName.toLowerCase().includes(query)) ||
-        (app.epName && app.epName.toLowerCase().includes(query))
+      const characterMatch = a.actor.characterName && typeof a.actor.characterName === 'string' && a.actor.characterName.toLowerCase().includes(query);
+      const hasInRoles = (a.appearances || []).some(app => 
+        (app.rawActor && app.rawActor.characterName && typeof app.rawActor.characterName === 'string' && app.rawActor.characterName.toLowerCase().includes(query)) ||
+        (app.epName && typeof app.epName === 'string' && app.epName.toLowerCase().includes(query))
       );
-      return nameMatch || characterMatch || hasInRoles;
+      return Boolean(nameMatch || characterMatch || hasInRoles);
     });
 
     // 3. Match individual episodes across all shows and universes
     const matchedEpisodes: { entry: RatingEntry; seasonNum: number; episode: Episode }[] = [];
-    entries.forEach(entry => {
-      if (entry.seasons) {
+    (entries || []).forEach(entry => {
+      if (entry && entry.seasons) {
         entry.seasons.forEach(s => {
-          if (s.episodes) {
+          if (s && s.episodes) {
             s.episodes.forEach(ep => {
+              if (!ep) return;
               const epTag = `s${s.seasonNumber}e${ep.episodeNumber}`.toLowerCase();
               const epShortTag = `e${ep.episodeNumber}`.toLowerCase();
-              const nameMatch = ep.name.toLowerCase().includes(query);
+              const nameMatch = ep.name && typeof ep.name === 'string' && ep.name.toLowerCase().includes(query);
               const tagMatch = epTag.includes(query) || epShortTag === query;
               const yearMatch = ep.releaseYear && String(ep.releaseYear).toLowerCase().includes(query);
-              const dirMatch = ep.director && ep.director.toLowerCase().includes(query);
-              const overviewMatch = ep.overview && ep.overview.toLowerCase().includes(query);
+              const dirMatch = ep.director && typeof ep.director === 'string' && ep.director.toLowerCase().includes(query);
+              const overviewMatch = ep.overview && typeof ep.overview === 'string' && ep.overview.toLowerCase().includes(query);
 
               if (nameMatch || tagMatch || yearMatch || dirMatch || overviewMatch) {
                 matchedEpisodes.push({
@@ -639,13 +661,14 @@ export default function App() {
     recentContributions.forEach(c => {
       if (c.userName && c.userName.toLowerCase().includes(query)) {
         if (!matchedProfilesMap.has(c.userId)) {
+          const creationDate = c.timestamp || new Date().toISOString();
           matchedProfilesMap.set(c.userId, {
             uid: c.userId,
             displayName: c.userName,
             photoURL: c.userPhotoUrl,
             email: '',
-            createdAt: c.createdAt,
-            lastActive: c.createdAt,
+            createdAt: creationDate,
+            lastActive: creationDate,
             contributionsCount: 1
           });
         }
@@ -1597,7 +1620,7 @@ export default function App() {
                       isHovered
                         ? '-translate-y-1 scale-105 z-20 bg-zinc-900 border-yellow-400 text-yellow-400 shadow-[0_4px_20px_rgba(250,204,21,0.25)]'
                         : isSelected
-                          ? 'z-10 bg-yellow-400 text-zinc-955 border-yellow-300 shadow-[0_0_15px_rgba(250,204,21,0.35)]'
+                          ? 'z-10 bg-yellow-400 text-zinc-955 border-yellow-300 shadow-[0_0_15px_rgba(250,204,21,0.35)] font-black'
                           : 'z-0 bg-zinc-900/60 text-zinc-400 border-zinc-800/80 hover:text-zinc-200'
                     }`}
                     title={tab.label}
@@ -1686,6 +1709,43 @@ export default function App() {
                           </span>
                           <Sparkles size={12} className="text-yellow-400" />
                         </div>
+
+                        {/* IMDb / OMDb Explorer */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setActiveTab('imdb');
+                            setSelectedActorName(null);
+                          }}
+                          id="btn-imdb-explorer-tools"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-amber-300 hover:bg-amber-500/15 hover:text-amber-200 transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 font-black text-[10px] group-hover:scale-105 transition-transform">
+                            IMDb
+                          </div>
+                          <div>
+                            <div className="font-bold text-amber-300">IMDb Istraživač (OMDb)</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Pretraži i uvezi filmove i serije</div>
+                          </div>
+                        </button>
+
+                        {/* API Keys Configuration (TMDB / OMDb) */}
+                        <button
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setIsApiKeysModalOpen(true);
+                          }}
+                          id="btn-api-keys-tools"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold text-sky-300 hover:bg-sky-500/15 hover:text-sky-200 transition-all text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
+                            <Key size={13} />
+                          </div>
+                          <div>
+                            <div className="font-bold text-sky-300">API Ključevi (TMDB & OMDb)</div>
+                            <div className="text-[9px] text-zinc-400 font-normal">Podesi TMDB za HD trailere i opise</div>
+                          </div>
+                        </button>
 
                         {/* Surprise Me */}
                         <button
@@ -2191,7 +2251,7 @@ export default function App() {
                 </div>
 
                 {/* NAVIGATION SHORTCUTS */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <button
                     onClick={() => setActiveTab('leaderboard')}
                     className="p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 hover:border-yellow-400/40 text-left hover:-translate-y-0.5 transition-all duration-200 active:scale-98 cursor-pointer flex items-center gap-4 group shadow-lg"
@@ -2201,7 +2261,7 @@ export default function App() {
                     </div>
                     <div className="min-w-0">
                       <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Otvorite Rang Liste</h4>
-                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">Glumačke postave i top performanse</p>
+                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">Glumačke postave i top ocjene</p>
                     </div>
                   </button>
 
@@ -2227,7 +2287,23 @@ export default function App() {
                     </div>
                     <div className="min-w-0">
                       <h4 className="text-xs font-black uppercase text-zinc-100 tracking-wider">Centralna Baza Glumaca</h4>
-                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">Biografije, galerije i uloge u projektima</p>
+                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">Biografije, galerije i uloge</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('imdb')}
+                    className="p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 backdrop-blur-md border border-yellow-500/30 hover:border-yellow-400/60 text-left hover:-translate-y-0.5 transition-all duration-200 active:scale-98 cursor-pointer flex items-center gap-4 group shadow-lg"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-yellow-400/15 border border-yellow-400/30 flex items-center justify-center text-yellow-400 font-black text-xs group-hover:bg-yellow-400/30 group-hover:scale-105 transition-all shrink-0 shadow-[0_0_12px_rgba(250,204,21,0.2)]">
+                      IMDb
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black uppercase text-yellow-400 tracking-wider flex items-center gap-1.5">
+                        IMDb Istraživač
+                        <Sparkles size={11} className="text-yellow-400 animate-pulse" />
+                      </h4>
+                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">Pretraga i uvoz sa OMDb baze</p>
                     </div>
                   </button>
                 </div>
@@ -2412,18 +2488,20 @@ export default function App() {
                 exit={{ opacity: 0, x: 16 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
-                <BazaView
-                  entries={entries}
-                  allActorsWithAppearances={allActorsWithAppearances}
-                  selectedActorName={selectedActorName}
-                  setSelectedActorName={setSelectedActorName}
-                  onNavigateToEntry={(entryId, seasonNum, epNum) => {
-                    handleNavigateFromActorCatalog(entryId, seasonNum, epNum);
-                    setActiveTab('katalog');
-                  }}
-                  onUpdateActorGlobalDetails={handleUpdateActorGlobalDetails}
-                  onUpdateActorAppearanceRating={handleUpdateActorAppearanceRating}
-                />
+                <ErrorBoundary fallbackTitle="Greška pri prikazu Baze i Projekata">
+                  <BazaView
+                    entries={entries}
+                    allActorsWithAppearances={allActorsWithAppearances}
+                    selectedActorName={selectedActorName}
+                    setSelectedActorName={setSelectedActorName}
+                    onNavigateToEntry={(entryId, seasonNum, epNum) => {
+                      handleNavigateFromActorCatalog(entryId, seasonNum, epNum);
+                      setActiveTab('katalog');
+                    }}
+                    onUpdateActorGlobalDetails={handleUpdateActorGlobalDetails}
+                    onUpdateActorAppearanceRating={handleUpdateActorAppearanceRating}
+                  />
+                </ErrorBoundary>
               </motion.div>
             ) : activeTab === 'leaderboard' ? (
               <motion.div
@@ -2434,12 +2512,91 @@ export default function App() {
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
                 <LeaderboardView
+                  entries={entries}
                   allActorsWithAppearances={allActorsWithAppearances}
                   onNavigateToActor={(actorName) => {
                     setSelectedActorName(actorName);
                     setActiveTab('glumci');
                   }}
+                  onNavigateToEntry={(entryId) => {
+                    handleSelectEntry(entryId);
+                    setActiveTab('katalog');
+                  }}
                 />
+              </motion.div>
+            ) : activeTab === 'imdb' ? (
+              <motion.div
+                key="tab-imdb"
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <ErrorBoundary fallbackTitle="Greška pri prikazu IMDb Istraživača">
+                  <ImdbExplorerView
+                    existingEntries={entries}
+                    onClose={() => setActiveTab('katalog')}
+                    onImportToCatalog={(newEntry) => {
+                      setEntries(prev => {
+                        const exists = prev.some(e => e.id === newEntry.id || e.name.toLowerCase() === newEntry.name.toLowerCase());
+                        if (exists) {
+                          return prev.map(e => (e.id === newEntry.id || e.name.toLowerCase() === newEntry.name.toLowerCase()) ? newEntry : e);
+                        }
+                        return [newEntry, ...prev];
+                      });
+                      setActiveId(newEntry.id);
+                      setActiveTab('katalog');
+                      setShowSaveToast(true);
+                      setTimeout(() => setShowSaveToast(false), 3000);
+                    }}
+                    onAddToProject={(projectId, item) => {
+                      try {
+                        const saved = localStorage.getItem('baza_projekti_v1');
+                        let projects: ProjectFolder[] = saved ? JSON.parse(saved) : [];
+                        const idx = projects.findIndex(p => p.id === projectId);
+                        if (idx !== -1) {
+                          if (!projects[idx].items.some(i => i.id === item.id)) {
+                            projects[idx].items.push(item);
+                            projects[idx].updatedAt = new Date().toISOString();
+                            localStorage.setItem('baza_projekti_v1', JSON.stringify(projects));
+                          }
+                        }
+                      } catch (err) {
+                        console.error('Error saving to project:', err);
+                      }
+                    }}
+                    onCreateProject={(name, description, color, icon) => {
+                      try {
+                        const saved = localStorage.getItem('baza_projekti_v1');
+                        let projects: ProjectFolder[] = saved ? JSON.parse(saved) : [];
+                        const newProj: ProjectFolder = {
+                          id: 'proj-' + Date.now(),
+                          name,
+                          description,
+                          color: color || '#eab308',
+                          icon: icon || 'folder',
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                          items: []
+                        };
+                        projects.push(newProj);
+                        localStorage.setItem('baza_projekti_v1', JSON.stringify(projects));
+                        return newProj.id;
+                      } catch (err) {
+                        console.error('Error creating project:', err);
+                        return 'proj-' + Date.now();
+                      }
+                    }}
+                    projectFolders={(() => {
+                      try {
+                        const saved = localStorage.getItem('baza_projekti_v1');
+                        return saved ? JSON.parse(saved) : [];
+                      } catch (e) {
+                        return [];
+                      }
+                    })()}
+                  />
+                </ErrorBoundary>
               </motion.div>
             ) : activeTab === 'chat' ? (
               <motion.div
@@ -2463,31 +2620,123 @@ export default function App() {
                 transition={{ duration: 0.2, ease: "easeOut" }}
                 className="space-y-6"
               >
-                {/* TITLE SELECTOR CHIPS BAR FOR KATALOG */}
-                {entries.filter(e => e.type !== 'universe').length > 0 && (
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400 shrink-0 pr-1">
-                      Izaberi naslov:
-                    </span>
-                    {entries.filter(e => e.type !== 'universe').map(e => {
-                      const isSelected = e.id === activeEntry?.id;
-                      return (
+                {/* CATEGORY SOURCE FILTER BAR: SVI, OFFLINE/AUTORSKI, IMDB */}
+                {(() => {
+                  const allCatalog = entries.filter(e => e.type !== 'universe');
+                  const localCatalog = allCatalog.filter(e => e.source !== 'imdb');
+                  const imdbCatalog = allCatalog.filter(e => e.source === 'imdb');
+                  const visibleCatalog = katalogSourceFilter === 'local' 
+                    ? localCatalog 
+                    : katalogSourceFilter === 'imdb' 
+                      ? imdbCatalog 
+                      : allCatalog;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-zinc-800/80">
+                        {/* Source category selector pills */}
+                        <div className="flex items-center gap-1.5 bg-zinc-950/90 p-1 rounded-2xl border border-zinc-800/80">
+                          <button
+                            onClick={() => setKatalogSourceFilter('local')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              katalogSourceFilter === 'local'
+                                ? 'bg-yellow-400 text-zinc-955 shadow font-black'
+                                : 'text-zinc-400 hover:text-white'
+                            }`}
+                          >
+                            <span>🏠</span> Offline / Lokalno ({localCatalog.length})
+                          </button>
+                          <button
+                            onClick={() => setKatalogSourceFilter('imdb')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              katalogSourceFilter === 'imdb'
+                                ? 'bg-yellow-400 text-zinc-955 shadow font-black'
+                                : 'text-zinc-400 hover:text-white'
+                            }`}
+                          >
+                            <span className="bg-yellow-400 text-zinc-955 text-[9px] font-black px-1 rounded">IMDb</span>
+                            <span>Uvezeno ({imdbCatalog.length})</span>
+                          </button>
+                          <button
+                            onClick={() => setKatalogSourceFilter('all')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              katalogSourceFilter === 'all'
+                                ? 'bg-yellow-400 text-zinc-955 shadow font-black'
+                                : 'text-zinc-400 hover:text-white'
+                            }`}
+                          >
+                            Svi Naslovi ({allCatalog.length})
+                          </button>
+                        </div>
+
+                        {/* Direct trigger for IMDb explorer from catalog */}
                         <button
-                          key={`katalog-chip-${e.id}`}
-                          onClick={() => handleSelectEntry(e.id)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 border ${
-                            isSelected
-                              ? 'bg-yellow-400 text-zinc-955 border-yellow-400 font-black shadow-[0_0_15px_rgba(250,204,21,0.25)]'
-                              : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-white'
-                          }`}
+                          onClick={() => {
+                            setActiveTab('imdb');
+                            setSelectedActorName(null);
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-yellow-400/10 hover:bg-yellow-400 text-yellow-400 hover:text-zinc-955 border border-yellow-500/30 transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
                         >
-                          <span>{e.type === 'movie' ? '🎬' : '📺'}</span>
-                          <span className="truncate max-w-[150px]">{e.name}</span>
+                          <Globe size={13} />
+                          <span>Pretraži & Uvezi sa IMDb-a</span>
                         </button>
-                      );
-                    })}
-                  </div>
-                )}
+                      </div>
+
+                      {/* TITLE SELECTOR CHIPS BAR FOR KATALOG */}
+                      {visibleCatalog.length > 0 ? (
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400 shrink-0 pr-1">
+                            Izaberi naslov:
+                          </span>
+                          {visibleCatalog.map(e => {
+                            const isSelected = e.id === activeEntry?.id;
+                            const isImdbSource = e.source === 'imdb';
+
+                            return (
+                              <button
+                                key={`katalog-chip-${e.id}`}
+                                onClick={() => handleSelectEntry(e.id)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 border ${
+                                  isSelected
+                                    ? 'bg-yellow-400 text-zinc-955 border-yellow-400 font-black shadow-[0_0_15px_rgba(250,204,21,0.25)]'
+                                    : isImdbSource
+                                      ? 'bg-zinc-900/90 text-yellow-300/90 border-yellow-500/30 hover:border-yellow-400 hover:text-yellow-200'
+                                      : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-white'
+                                }`}
+                              >
+                                <span>{e.type === 'movie' ? '🎬' : '📺'}</span>
+                                <span className="truncate max-w-[150px]">{e.name}</span>
+                                {isImdbSource && (
+                                  <span className={`text-[8px] font-black uppercase px-1 rounded ${isSelected ? 'bg-zinc-955 text-yellow-400' : 'bg-yellow-400 text-zinc-955'}`}>
+                                    IMDb
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : katalogSourceFilter === 'imdb' ? (
+                        <div className="p-6 bg-zinc-950/80 border border-yellow-500/20 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2 justify-center sm:justify-start">
+                              <Globe size={14} className="text-yellow-400" />
+                              Nema uvezenih naslova sa IMDb-a
+                            </h4>
+                            <p className="text-[11px] text-zinc-400">
+                              Istražite bazu filmova i serija, preuzmite sve sezone i ocjene sa IMDb-a jednim klikom.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setActiveTab('imdb')}
+                            className="px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-zinc-955 font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shrink-0"
+                          >
+                            Otvori IMDb Istraživač
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
 
                 {/* FILTERS & SEARCH LINE */}
                 <section id="search-filter-controls" className="p-4 rounded-xl border transition-colors bg-zinc-900/30 border-zinc-900">
@@ -3645,9 +3894,47 @@ export default function App() {
                      universalSearchResults.actors.length === 0 && 
                      universalSearchResults.episodes.length === 0 && 
                      universalSearchResults.profiles.length === 0 && (
-                      <div className="text-center py-12 text-zinc-500 space-y-1">
-                        <p className="text-sm font-semibold">Nema rezultata za "{universalQuery}"</p>
-                        <p className="text-[10px] text-zinc-600">Pokušajte sa nekim drugim pojmom ili provjerite pravopis.</p>
+                      <div className="text-center py-8 text-zinc-500 space-y-4">
+                        <p className="text-sm font-semibold text-zinc-400">Nema lokalnih rezultata za "{universalQuery}"</p>
+                        <p className="text-xs text-zinc-500">Pokušajte pretražiti direktno na globalnoj IMDb bazi:</p>
+                        <button
+                          onClick={() => {
+                            setIsUniversalSearchOpen(false);
+                            setActiveTab('imdb');
+                          }}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-yellow-400 text-zinc-955 font-black text-xs hover:bg-yellow-300 transition-all shadow-lg cursor-pointer"
+                        >
+                          <span className="bg-zinc-955 text-yellow-400 px-1 py-0.5 rounded text-[10px] font-black">IMDb</span>
+                          Pretraži globalnu IMDb bazu za "{universalQuery}" →
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Quick IMDb action banner if query is present */}
+                    {universalQuery.trim().length >= 2 && (
+                      <div className="pt-2 border-t border-zinc-800/80">
+                        <button
+                          onClick={() => {
+                            setIsUniversalSearchOpen(false);
+                            setActiveTab('imdb');
+                          }}
+                          className="w-full text-left p-3 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 hover:border-yellow-400/50 transition flex items-center justify-between group cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-yellow-400 text-zinc-955 font-black text-[10px] flex items-center justify-center shrink-0">
+                              IMDb
+                            </div>
+                            <div>
+                              <p className="text-xs font-black text-yellow-400 group-hover:text-yellow-300">
+                                Pretražite IMDb bazu filmova i serija za "{universalQuery}"
+                              </p>
+                              <p className="text-[10px] text-zinc-400">Uvoz novih filmova, serija i postera direktno sa IMDb/OMDb servisa</p>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold text-yellow-400 group-hover:translate-x-1 transition-transform">
+                            Otvori IMDb →
+                          </span>
+                        </button>
                       </div>
                     )}
                   </>
@@ -3708,8 +3995,16 @@ export default function App() {
         onBossDefeated={() => {
           if (userProfile && user) {
             const currentTrophies = userProfile.trophies || [];
-            if (!currentTrophies.includes('palacinka_master')) {
-              handleProfileUpdate({ trophies: [...currentTrophies, 'palacinka_master'] });
+            const hasMasterTrophy = currentTrophies.some(t => (typeof t === 'object' && t?.id === 'palacinka_master') || (t as any) === 'palacinka_master');
+            if (!hasMasterTrophy) {
+              const newTrophy: TrophyItem = {
+                id: 'palacinka_master',
+                name: 'Palačinka Šampion',
+                description: 'Savladan legendarni Palačinka Boss!',
+                icon: '🥞',
+                unlockedAt: new Date().toISOString()
+              };
+              handleProfileUpdate({ trophies: [...currentTrophies, newTrophy] });
             }
           }
         }}
@@ -3717,6 +4012,12 @@ export default function App() {
 
       {/* VEDO DELA EASTER EGG PHYSICS OVERLAY */}
       <VedoPhysicsOverlay isActive={isVedoMode} />
+
+      {/* API KEYS CONFIGURATION MODAL (TMDB & OMDb) */}
+      <ApiKeysModal 
+        isOpen={isApiKeysModalOpen}
+        onClose={() => setIsApiKeysModalOpen(false)}
+      />
 
       {/* RESET PASSWORD MODAL */}
       {resetOobCode && (

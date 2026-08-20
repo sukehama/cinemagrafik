@@ -756,18 +756,22 @@ export default function DetailPopup({
               {/* Ultra smooth Netflix style gradient mask */}
               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 via-zinc-950/40 to-black/70 z-10" />
               
-              {/* Play Button Overlay if Youtube Trailer exists */}
-              {embedUrl && (
+              {/* Play Button Overlay if Youtube Trailer / Link exists */}
+              {youtubeUrl && (
                 <div className="absolute inset-0 flex items-center justify-center z-15">
                   <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                     onClick={() => {
-                      setShowTrailer(true);
-                      setVideoStartTime(null);
+                      if (embedUrl) {
+                        setShowTrailer(true);
+                        setVideoStartTime(null);
+                      } else {
+                        window.open(youtubeUrl, '_blank', 'noopener,noreferrer');
+                      }
                     }}
                     className="bg-red-600 hover:bg-red-500 border border-red-500/30 text-white p-4.5 rounded-full shadow-[0_0_30px_rgba(220,38,38,0.5)] cursor-pointer flex items-center justify-center backdrop-blur-sm"
-                    title="Pokreni video isječak"
+                    title={embedUrl ? "Pokreni video isječak" : "Pogledaj trailer na YouTube-u"}
                   >
                     <Play size={22} className="fill-white ml-0.5" />
                   </motion.button>
