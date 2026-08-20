@@ -54,9 +54,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK
+      - name: Install NDK & Build Tools
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -77,20 +77,15 @@ jobs:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
 
       - name: Sign Android APK
-        uses: rsksetup/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: src-tauri/gen/android/app/build/outputs/apk/universal/release
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > release.jks
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks release.jks --ks-pass pass:"${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" --key-pass pass:"${{ secrets.ANDROID_KEY_PASSWORD }}" --out src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-signed.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 
       - name: Attach Signed APK to Draft Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           tag_name: v1.0.0-${{ github.run_number }}
-          files: ${{ steps.sign_app.outputs.signedFile }}
+          files: src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-signed.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
