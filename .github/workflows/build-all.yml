@@ -78,8 +78,10 @@ jobs:
 
       - name: Sign Android APK
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d -i > release.jks
+          python3 -c "import base64, os; open('release.jks', 'wb').write(base64.b64decode(os.environ['KEYSTORE_B64']))"
           $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks release.jks --ks-pass pass:"${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" --key-pass pass:"${{ secrets.ANDROID_KEY_PASSWORD }}" --out src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-signed.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
 
       - name: Attach Signed APK to Release
         uses: softprops/action-gh-release@v2
