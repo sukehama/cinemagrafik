@@ -1505,7 +1505,11 @@ export default function App() {
         />
 
         {/* HEADER NAVBAR & TOP FLOATING NAVIGATION DOCK */}
-        <header id="app-navbar" className="sticky top-0 z-40 px-3 sm:px-8 py-2.5 sm:py-3.5 backdrop-blur-3xl bg-zinc-950/85 border-b border-zinc-850/60 shadow-[0_10px_40px_rgba(0,0,0,0.8)] transition-all">
+        <header 
+          id="app-navbar" 
+          className="sticky top-0 z-40 px-3 sm:px-8 pb-2.5 sm:pb-3.5 backdrop-blur-3xl bg-zinc-950/90 border-b border-zinc-850/60 shadow-[0_10px_40px_rgba(0,0,0,0.8)] transition-all"
+          style={{ paddingTop: 'max(0.625rem, calc(env(safe-area-inset-top, 0px) + 0.625rem))' }}
+        >
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
             
             {/* TOP LEFT: BRAND LOGO & QUICK ENTRY SELECTOR */}
@@ -2793,8 +2797,8 @@ export default function App() {
             {/* Cinematic banner card background */}
             <div className={`relative rounded-3xl overflow-hidden border transition-all duration-500 bg-zinc-950 border-zinc-900 ${activeTheme?.glowShadow || 'shadow-[0_0_50px_-12px_rgba(255,255,255,0.05)]'}`}>
               
-              {/* Widescreen Cinema Banner (completely visible on all viewports, including Android) */}
-              <div className="relative h-44 sm:h-60 md:h-72 w-full overflow-hidden select-none bg-zinc-950">
+              {/* Widescreen Cinema Banner */}
+              <div className="relative h-36 sm:h-60 md:h-72 w-full overflow-hidden select-none bg-zinc-950">
                 <img
                   src={activeEntry.bannerUrl || activeEntry.posterUrl}
                   alt={activeEntry.name}
@@ -2805,15 +2809,15 @@ export default function App() {
                 {/* Cinema grading overlay vignette details */}
                 <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
 
-                {/* Tinted dynamic brand stripe representing our active color scheme */}
-                <div className="absolute bottom-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-yellow-505/85 to-transparent" style={{ backgroundImage: `linear-gradient(to right, transparent, ${activeTheme?.accentColor || '#f59e0b'}, transparent)` }} />
+                {/* Tinted dynamic brand stripe */}
+                <div className="absolute bottom-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-yellow-500/85 to-transparent" style={{ backgroundImage: `linear-gradient(to right, transparent, ${activeTheme?.accentColor || '#f59e0b'}, transparent)` }} />
               </div>
 
               {/* Main content layer */}
-              <div className="relative p-6 sm:p-8 flex flex-col md:flex-row gap-6 sm:gap-8 pt-4 md:pt-6">
+              <div className="relative p-4 sm:p-8 flex flex-col md:flex-row gap-4 sm:gap-8 pt-2 md:pt-6">
                 
-                {/* Interactive Big Poster Overlay (floats beautifully over banner) */}
-                <div className="-mt-20 sm:-mt-28 md:-mt-32 w-40 sm:w-48 aspect-[2/3] bg-zinc-950 rounded-2xl overflow-hidden shadow-2xl shrink-0 self-center md:self-start z-10 border-4" style={{ borderColor: activeTheme?.accentColor ? `${activeTheme.accentColor}40` : '#18181b' }}>
+                {/* Interactive Big Poster Overlay (floats over banner) */}
+                <div className="-mt-14 sm:-mt-28 md:-mt-32 w-28 sm:w-44 md:w-48 aspect-[2/3] bg-zinc-950 rounded-2xl overflow-hidden shadow-2xl shrink-0 self-center md:self-start z-10 border-2 sm:border-4" style={{ borderColor: activeTheme?.accentColor ? `${activeTheme.accentColor}40` : '#18181b' }}>
                   <img
                     src={activeEntry.posterUrl}
                     alt={activeEntry.name}
@@ -2824,10 +2828,10 @@ export default function App() {
 
                 {/* Cover info */}
                 <div className="flex-1 flex flex-col justify-between py-1 text-center md:text-left">
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     
                     {/* Categories and actions */}
-                    <div className="flex flex-wrap items-center justify-center md:justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-center md:justify-between gap-2.5 sm:gap-3">
                       <div className="flex items-center gap-2">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-widest uppercase flex items-center gap-1.5 ${
                           activeEntry.type === 'show' 
@@ -2845,15 +2849,15 @@ export default function App() {
                       </div>
                       
                       {/* Actions toolbar */}
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
                         {(activeEntry.type === 'show' || activeEntry.type === 'universe') && (
                           <button
                             onClick={() => setIsStatsModalOpen(true)}
                             id="btn-open-analytics-modal"
-                            className="flex items-center gap-1.5 text-xs text-yellow-500 hover:text-yellow-400 font-bold hover:bg-yellow-500/10 px-2.5 py-1.5 rounded-lg border border-yellow-500/20 transition-all cursor-pointer"
+                            className="flex items-center gap-1 text-[11px] sm:text-xs text-yellow-500 hover:text-yellow-400 font-bold hover:bg-yellow-500/10 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-yellow-500/20 transition-all cursor-pointer"
                             title="Prikaz detaljne Recharts statistike"
                           >
-                            <BarChart2 size={13} /> Analitika i Trendovi
+                            <BarChart2 size={12} /> <span className="hidden xs:inline">Analitika</span>
                           </button>
                         )}
 
@@ -2861,26 +2865,26 @@ export default function App() {
                         <button
                           onClick={() => setIsEditModalOpen(true)}
                           id="btn-edit-active-attributes"
-                          className="flex items-center gap-1 text-xs font-bold hover:bg-yellow-500/10 border px-2.5 py-1.5 rounded-lg transition-all cursor-pointer text-zinc-300 bg-zinc-900 border-zinc-850 hover:text-yellow-400 hover:border-yellow-400/30"
+                          className="flex items-center gap-1 text-[11px] sm:text-xs font-bold hover:bg-yellow-500/10 border px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg transition-all cursor-pointer text-zinc-300 bg-zinc-900 border-zinc-850 hover:text-yellow-400 hover:border-yellow-400/30"
                           title="Uredi naslov, opis i slike"
                         >
-                          <Edit size={13} /> Uredi Detalje
+                          <Edit size={12} /> Uredi
                         </button>
 
                         {/* Delete this title icon */}
                         <button
                           onClick={handleDeleteActiveEntry}
                           id="btn-delete-active-slate"
-                          className="flex items-center gap-1 text-xs text-red-500 hover:text-red-400 font-bold hover:bg-red-500/10 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                          className="flex items-center gap-1 text-[11px] sm:text-xs text-red-500 hover:text-red-400 font-bold hover:bg-red-500/10 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg transition-colors cursor-pointer"
                           title="Obrišite ovaj naslov i sve njegove faza ili sezone"
                         >
-                          <Trash2 size={13} /> Obriši Naslov
+                          <Trash2 size={12} /> Obriši
                         </button>
                       </div>
                     </div>
 
                     {/* Show Name */}
-                    <h1 className="text-3xl sm:text-4.5xl font-black tracking-tight text-white">
+                    <h1 className="text-xl sm:text-3.5xl font-black tracking-tight text-white">
                       {activeEntry.name}
                     </h1>
 
@@ -2888,7 +2892,7 @@ export default function App() {
                     <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5 pt-1">
                       {/* Yellow Pill: ★ 8.0 (Prosjek) */}
                       <div className="px-3.5 py-1.5 rounded-xl bg-yellow-400/15 text-yellow-400 border border-yellow-400/30 font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md backdrop-blur-sm">
-                        <Star size={15} className="fill-yellow-400 text-yellow-400 shrink-0" />
+                        <Star size={14} className="fill-yellow-400 text-yellow-400 shrink-0" />
                         <span>{calculateAverageRating(activeEntry) > 0 ? calculateAverageRating(activeEntry).toFixed(1) : '—'} (Prosjek)</span>
                       </div>
 
@@ -2914,7 +2918,8 @@ export default function App() {
                         </span>
                       </div>
 
-                      {activeEntry.movieDuration && (
+                      {/* Movie Duration Tag if applicable */}
+                      {activeEntry.type === 'movie' && activeEntry.movieDuration && (
                         <div className="px-3.5 py-1.5 rounded-xl bg-zinc-900/80 text-zinc-300 border border-zinc-800 font-bold text-xs flex items-center gap-1.5 shadow-md backdrop-blur-sm">
                           <Clock size={14} className="text-zinc-400 shrink-0" />
                           <span>⏱ {activeEntry.movieDuration}</span>
@@ -2923,9 +2928,11 @@ export default function App() {
                     </div>
 
                     {/* Brief description */}
-                    <p className="text-sm leading-relaxed max-w-2xl text-zinc-400">
-                      {activeEntry.description}
-                    </p>
+                    {activeEntry.description && (
+                      <p className="text-xs sm:text-sm leading-relaxed max-w-2xl text-zinc-400 mx-auto md:mx-0">
+                        {activeEntry.description}
+                      </p>
+                    )}
                   </div>
                 </div>
 

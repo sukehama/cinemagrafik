@@ -252,10 +252,10 @@ export default function LeaderboardView({
         </div>
 
         {/* SOURCE FILTER SEGMENTED BUTTONS (LOKALNO vs IMDB vs SVI) */}
-        <div className="flex items-center gap-1.5 bg-zinc-950 p-1.5 rounded-2xl border border-zinc-800 shrink-0 self-start md:self-auto">
+        <div className="flex flex-wrap items-center gap-1.5 bg-zinc-950 p-1.5 rounded-2xl border border-zinc-800 shrink-0 self-start md:self-auto">
           <button
             onClick={() => setSourceFilter('local')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
               sourceFilter === 'local'
                 ? 'bg-yellow-400 text-zinc-955 shadow-lg shadow-yellow-400/20 font-black'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
@@ -267,19 +267,19 @@ export default function LeaderboardView({
 
           <button
             onClick={() => setSourceFilter('imdb')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
               sourceFilter === 'imdb'
                 ? 'bg-yellow-400 text-zinc-955 shadow-lg shadow-yellow-400/20 font-black'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
             }`}
           >
             <Sparkles size={13} className="text-yellow-400" />
-            <span>IMDb / TMDB ({imdbCount})</span>
+            <span>IMDb ({imdbCount})</span>
           </button>
 
           <button
             onClick={() => setSourceFilter('all')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
               sourceFilter === 'all'
                 ? 'bg-yellow-400 text-zinc-955 shadow-lg shadow-yellow-400/20 font-black'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
@@ -292,34 +292,34 @@ export default function LeaderboardView({
       </div>
 
       {/* SUB-TABS: GLUMCI vs FILMOVI & SERIJE vs EPIZODE */}
-      <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-3">
+      <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-3 overflow-x-auto scrollbar-none">
         <button
           onClick={() => setLeaderboardTab('actors')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
             leaderboardTab === 'actors'
               ? 'bg-zinc-800 text-yellow-400 border border-yellow-400/30'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
           }`}
         >
           <Users size={15} />
-          <span>Rang Lista Glumaca ({filteredActorsData.length})</span>
+          <span>Glumci ({filteredActorsData.length})</span>
         </button>
 
         <button
           onClick={() => setLeaderboardTab('titles')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
             leaderboardTab === 'titles'
               ? 'bg-zinc-800 text-yellow-400 border border-yellow-400/30'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
           }`}
         >
           <Film size={15} />
-          <span>Top Filmovi & Serije ({topTitlesLeaderboard.length})</span>
+          <span>Filmovi & Serije ({topTitlesLeaderboard.length})</span>
         </button>
 
         <button
           onClick={() => setLeaderboardTab('episodes')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
             leaderboardTab === 'episodes'
               ? 'bg-zinc-800 text-yellow-400 border border-yellow-400/30'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'

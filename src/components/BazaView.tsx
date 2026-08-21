@@ -388,49 +388,49 @@ export default function BazaView({
   };
 
   return (
-    <div className="space-y-6" id="baza-root-panel">
+    <div className="space-y-6 w-full max-w-full overflow-hidden" id="baza-root-panel">
       
       {/* TOP SUB-TAB NAVIGATION: GLUMCI vs PROJEKTI */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-zinc-800/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl sm:text-2xl font-black text-white uppercase tracking-tight flex items-center gap-2.5">
-              <FolderKanban className="text-emerald-400 w-6 h-6" /> Centralna Baza
+            <h2 className="text-lg sm:text-2xl font-black text-white uppercase tracking-tight flex items-center gap-2.5">
+              <FolderKanban className="text-emerald-400 w-5 h-5 sm:w-6 sm:h-6" /> Centralna Baza
             </h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-[11px] sm:text-xs text-zinc-400 mt-1">
             Pregledajte glumce ili kreirajte personalizovane foldere projekata sa grupnim unosom epizoda i filmova.
           </p>
         </div>
 
         {/* SUB-TAB TOGGLE PILLS */}
-        <div className="flex items-center bg-zinc-900/90 border border-zinc-800 p-1 rounded-2xl shadow-inner shrink-0">
+        <div className="flex items-center justify-center bg-zinc-900/90 border border-zinc-800 p-1 rounded-2xl shadow-inner shrink-0 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => {
               setBazaSubTab('glumci');
               setSelectedActorName(null);
             }}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+            className={`flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
               bazaSubTab === 'glumci'
-                ? 'bg-emerald-500 text-zinc-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                ? 'bg-emerald-500 text-zinc-955 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
             }`}
           >
-            <User size={15} /> Glumci ({allActorsWithAppearances.length})
+            <User size={14} /> Glumci ({allActorsWithAppearances.length})
           </button>
           <button
             type="button"
             onClick={() => {
               setBazaSubTab('projekti');
             }}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+            className={`flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
               bazaSubTab === 'projekti'
-                ? 'bg-amber-400 text-zinc-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                ? 'bg-amber-400 text-zinc-955 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
             }`}
           >
-            <Folder size={15} /> Projekti ({projects.length})
+            <Folder size={14} /> Projekti ({projects.length})
           </button>
         </div>
       </div>
@@ -673,22 +673,22 @@ export default function BazaView({
                   </div>
 
                   {/* Actions & Rating Score Gauge */}
-                  <div className="flex items-center gap-5 relative z-10 shrink-0">
-                    <div className="flex items-center gap-3 bg-zinc-950/80 border border-zinc-800 px-4 py-2.5 rounded-2xl shadow-inner">
+                  <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 sm:gap-5 relative z-10 w-full md:w-auto">
+                    <div className="flex items-center gap-2.5 sm:gap-3 bg-zinc-950/80 border border-zinc-800 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl shadow-inner flex-1 sm:flex-initial">
                       <CircularRatingGauge 
                         rating={calculateProjectRating(activeProject?.items || [])} 
-                        size={64} 
-                        strokeWidth={5} 
+                        size={52} 
+                        strokeWidth={4.5} 
                       />
                       <div className="text-left">
-                        <span className="text-[9px] font-mono text-zinc-400 uppercase block">Prosječna Ocjena</span>
-                        <span className="text-sm font-black text-white">
+                        <span className="text-[8px] sm:text-[9px] font-mono text-zinc-400 uppercase block">Prosječna Ocjena</span>
+                        <span className="text-xs sm:text-sm font-black text-white">
                           {calculateProjectRating(activeProject?.items || []) > 0 
                             ? `${calculateProjectRating(activeProject?.items || [])} / 10` 
                             : 'Nema ocjena'
                           }
                         </span>
-                        <span className="text-[9px] text-zinc-400 block">
+                        <span className="text-[8px] sm:text-[9px] text-zinc-400 block">
                           Ukupno {(activeProject?.items || []).length} stavki
                         </span>
                       </div>
@@ -697,7 +697,7 @@ export default function BazaView({
                     <button
                       type="button"
                       onClick={() => setIsBulkAddOpen(true)}
-                      className="px-4 py-3 bg-amber-400 hover:bg-amber-300 text-zinc-955 text-xs font-black uppercase tracking-wider rounded-2xl flex items-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all cursor-pointer"
+                      className="px-4 py-2.5 sm:py-3 bg-amber-400 hover:bg-amber-300 text-zinc-955 text-xs font-black uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all cursor-pointer flex-1 sm:flex-initial"
                     >
                       <Plus size={16} /> + Dodaj u Bulk-u
                     </button>
@@ -837,8 +837,8 @@ export default function BazaView({
                 </div>
 
                 {/* Filter Controls & Search */}
-                <div className="p-5 border-b border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/40">
-                  <div className="relative flex-1 max-w-md">
+                <div className="p-3.5 sm:p-5 border-b border-zinc-800/60 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-zinc-900/40">
+                  <div className="relative flex-1 max-w-full md:max-w-md">
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                     <input
                       type="text"
@@ -850,26 +850,26 @@ export default function BazaView({
                   </div>
 
                   {/* Type Filter Pills */}
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded-xl text-xs font-bold">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded-xl text-xs font-bold shrink-0">
                       <button
                         type="button"
                         onClick={() => setBulkFilterType('all')}
-                        className={`px-3 py-1 rounded-lg transition-all ${bulkFilterType === 'all' ? 'bg-amber-400 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'}`}
+                        className={`px-2.5 sm:px-3 py-1 rounded-lg transition-all text-[11px] sm:text-xs ${bulkFilterType === 'all' ? 'bg-amber-400 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'}`}
                       >
                         Sve
                       </button>
                       <button
                         type="button"
                         onClick={() => setBulkFilterType('show')}
-                        className={`px-3 py-1 rounded-lg transition-all ${bulkFilterType === 'show' ? 'bg-emerald-400 text-zinc-955 font-black' : 'text-zinc-400 hover:text-white'}`}
+                        className={`px-2.5 sm:px-3 py-1 rounded-lg transition-all text-[11px] sm:text-xs ${bulkFilterType === 'show' ? 'bg-emerald-400 text-zinc-955 font-black' : 'text-zinc-400 hover:text-white'}`}
                       >
-                        Epizode Serija
+                        Epizode
                       </button>
                       <button
                         type="button"
                         onClick={() => setBulkFilterType('movie')}
-                        className={`px-3 py-1 rounded-lg transition-all ${bulkFilterType === 'movie' ? 'bg-sky-400 text-zinc-955 font-black' : 'text-zinc-400 hover:text-white'}`}
+                        className={`px-2.5 sm:px-3 py-1 rounded-lg transition-all text-[11px] sm:text-xs ${bulkFilterType === 'movie' ? 'bg-sky-400 text-zinc-955 font-black' : 'text-zinc-400 hover:text-white'}`}
                       >
                         Filmovi
                       </button>
@@ -878,14 +878,14 @@ export default function BazaView({
                     <button
                       type="button"
                       onClick={selectAllFiltered}
-                      className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-bold"
+                      className="px-2.5 sm:px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-[11px] sm:text-xs font-bold"
                     >
                       Izaberi Sve
                     </button>
                     <button
                       type="button"
                       onClick={deselectAllFiltered}
-                      className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-bold"
+                      className="px-2.5 sm:px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-[11px] sm:text-xs font-bold"
                     >
                       Poništi
                     </button>

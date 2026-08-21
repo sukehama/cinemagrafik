@@ -361,7 +361,10 @@ export default function GithubUpdateBanner({
   // Collapsed / Dismissed state floating pill
   if (isDismissed && hasUpdate) {
     return (
-      <div className="fixed top-3 right-20 z-50 animate-bounce-short">
+      <div 
+        className="fixed right-20 z-50 animate-bounce-short"
+        style={{ top: 'max(0.75rem, calc(env(safe-area-inset-top, 0px) + 0.75rem))' }}
+      >
         <button
           onClick={() => {
             setIsDismissed(false);
@@ -389,6 +392,7 @@ export default function GithubUpdateBanner({
             transition={{ duration: 0.3, ease: 'easeOut' }}
             id="github-update-notification-banner"
             className="relative z-50 bg-gradient-to-r from-blue-950/95 via-indigo-950/95 to-purple-950/95 border-b border-blue-500/40 text-white shadow-2xl backdrop-blur-2xl"
+            style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
           >
             <div className="max-w-7xl mx-auto px-4 sm:px-8 py-2.5 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
               

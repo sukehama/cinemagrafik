@@ -379,7 +379,7 @@ export default function ActorsView({
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4">
                 {filteredActors.map(({ actor, appearances }) => {
                   // Calculate average performance rating
                   const ratedApps = appearances.filter(a => a.rawActor.performanceRating !== undefined);
@@ -391,11 +391,11 @@ export default function ActorsView({
                     <div
                       key={`actor-card-${actor.name}`}
                       onClick={() => setSelectedActorName(actor.name)}
-                      className="group relative bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-850 hover:border-yellow-400/40 rounded-3xl p-4 text-center flex flex-col items-center transition-all duration-300 transform hover:-translate-y-1.5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)] cursor-pointer"
+                      className="group relative bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-850 hover:border-yellow-400/40 rounded-2xl sm:rounded-3xl p-2.5 sm:p-4 text-center flex flex-col items-center transition-all duration-300 transform hover:-translate-y-1.5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)] cursor-pointer overflow-hidden"
                     >
                       {/* Folder badges quick dropdown / toggle on top right */}
                       {folders.length > 0 && (
-                        <div className="absolute top-2 right-2 z-20">
+                        <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-20">
                           <div className="relative">
                             <button
                               type="button"
@@ -403,19 +403,19 @@ export default function ActorsView({
                                 e.stopPropagation();
                                 setOpenFolderActorName(prev => prev === actor.name ? null : actor.name);
                               }}
-                              className={`w-7 h-7 rounded-full border flex items-center justify-center shadow-lg transition-all cursor-pointer ${
+                              className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full border flex items-center justify-center shadow-lg transition-all cursor-pointer ${
                                 openFolderActorName === actor.name
                                   ? 'bg-yellow-400 text-zinc-955 border-yellow-300 scale-110 z-50'
                                   : 'bg-zinc-900/90 border-zinc-700 text-zinc-400 hover:text-yellow-400 hover:scale-105'
                               }`}
                               title="Upravljaj folderima za glumca"
                             >
-                              <FolderPlus size={13} />
+                              <FolderPlus size={11} className="sm:w-3.5 sm:h-3.5" />
                             </button>
                             {openFolderActorName === actor.name && (
                               <div 
                                 onClick={(e) => e.stopPropagation()}
-                                className="absolute right-0 top-8 bg-zinc-950 border border-yellow-400/40 rounded-2xl p-2.5 shadow-2xl z-[100] w-48 text-left space-y-1.5 animate-in fade-in zoom-in-95 duration-150"
+                                className="absolute right-0 top-8 bg-zinc-950 border border-yellow-400/40 rounded-2xl p-2.5 shadow-2xl z-[100] w-44 sm:w-48 text-left space-y-1.5 animate-in fade-in zoom-in-95 duration-150"
                               >
                                 <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5 px-1">
                                   <p className="text-[9px] font-black uppercase text-yellow-400 tracking-wider">Folderi za glumca</p>
@@ -432,7 +432,7 @@ export default function ActorsView({
                                     <button
                                       key={f.id}
                                       onClick={(e) => toggleActorInFolder(f.id, actor.name, e)}
-                                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center justify-between transition cursor-pointer ${
+                                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-[10px] sm:text-[11px] font-bold flex items-center justify-between transition cursor-pointer ${
                                         inF ? 'bg-yellow-400/15 text-yellow-300 border border-yellow-400/30' : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
                                       }`}
                                     >
@@ -448,8 +448,8 @@ export default function ActorsView({
                       )}
 
                       {/* Smooth Avatar Circle with Glowing Ring */}
-                      <div className="relative p-1 rounded-full bg-gradient-to-b from-zinc-700/40 to-zinc-900 group-hover:from-yellow-400/80 group-hover:to-yellow-600/60 transition-all duration-300 shadow-xl">
-                        <div className="w-20 h-20 rounded-full overflow-hidden bg-zinc-950 relative shrink-0 border border-zinc-900">
+                      <div className="relative p-0.5 sm:p-1 rounded-full bg-gradient-to-b from-zinc-700/40 to-zinc-900 group-hover:from-yellow-400/80 group-hover:to-yellow-600/60 transition-all duration-300 shadow-xl">
+                        <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full overflow-hidden bg-zinc-950 relative shrink-0 border border-zinc-900">
                           {actor.photoUrl ? (
                             <img
                               src={actor.photoUrl}
@@ -459,33 +459,33 @@ export default function ActorsView({
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-zinc-600 bg-zinc-950">
-                              <User className="w-8 h-8" />
+                              <User className="w-6 h-6 sm:w-8 sm:h-8" />
                             </div>
                           )}
                         </div>
                       </div>
 
                       {/* Info block */}
-                      <div className="mt-3.5 w-full">
-                        <h4 className="font-black text-xs text-zinc-100 tracking-tight truncate w-full group-hover:text-yellow-400 transition-colors">
+                      <div className="mt-2.5 sm:mt-3.5 w-full">
+                        <h4 className="font-black text-[11px] sm:text-xs text-zinc-100 tracking-tight truncate w-full group-hover:text-yellow-400 transition-colors">
                           {actor.name}
                         </h4>
                         
                         {actor.characterName && (
-                          <p className="text-[10px] text-zinc-400 truncate italic mt-0.5 font-medium">
+                          <p className="text-[9px] sm:text-[10px] text-zinc-400 truncate italic mt-0.5 font-medium">
                             {actor.characterName}
                           </p>
                         )}
                         
                         {/* Summary details */}
-                        <div className="flex items-center justify-center gap-2 mt-2.5 pt-2 border-t border-zinc-850/80">
-                          <span className="text-[9px] font-mono text-zinc-400 font-bold bg-zinc-900 px-2 py-0.5 rounded-full border border-zinc-800">
+                        <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-2 sm:mt-2.5 pt-1.5 sm:pt-2 border-t border-zinc-850/80">
+                          <span className="text-[8px] sm:text-[9px] font-mono text-zinc-400 font-bold bg-zinc-900 px-1.5 sm:px-2 py-0.5 rounded-full border border-zinc-800">
                             {appearances.length} {appearances.length === 1 ? 'Uloga' : appearances.length < 5 ? 'Uloge' : 'Uloga'}
                           </span>
                           
                           {avgRating > 0 && (
-                            <span className="flex items-center gap-0.5 text-[9px] font-mono font-black text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded-full border border-yellow-400/20">
-                              <Star size={9} className="fill-yellow-400 text-yellow-400" />
+                            <span className="flex items-center gap-0.5 text-[8px] sm:text-[9px] font-mono font-black text-yellow-400 bg-yellow-400/10 px-1.5 sm:px-2 py-0.5 rounded-full border border-yellow-400/20">
+                              <Star size={8} className="fill-yellow-400 text-yellow-400" />
                               {avgRating.toFixed(1)}
                             </span>
                           )}
@@ -713,13 +713,13 @@ export default function ActorsView({
                       </div>
 
                       {/* Performance rating control */}
-                      <div className="flex items-center justify-between pt-3 border-t border-zinc-900/60">
-                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-zinc-900/60">
+                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest shrink-0">
                           Ocjena Glume:
                         </span>
                         
                         {/* Interactive stars bar */}
-                        <div className="flex items-center gap-1">
+                        <div className="flex flex-wrap items-center gap-0.5 sm:gap-1">
                           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => {
                             const isSelected = star <= currentRating;
                             return (
@@ -732,12 +732,12 @@ export default function ActorsView({
                                   app.epNum,
                                   star
                                 )}
-                                className="transition transform hover:scale-125 cursor-pointer"
+                                className="p-0.5 transition transform hover:scale-125 cursor-pointer"
                                 title={`Ocijeni sa ${star}/10`}
                               >
                                 <Star 
-                                  size={13} 
-                                  className={`${
+                                  size={11} 
+                                  className={`sm:w-3.5 sm:h-3.5 ${
                                     isSelected 
                                       ? 'fill-yellow-500 text-yellow-500' 
                                       : 'text-zinc-700 hover:text-zinc-500'
@@ -746,7 +746,7 @@ export default function ActorsView({
                               </button>
                             );
                           })}
-                          <span className="text-[11px] font-mono font-black text-zinc-400 ml-1.5">
+                          <span className="text-[10px] sm:text-[11px] font-mono font-black text-zinc-400 ml-1">
                             {hasRating ? `${currentRating.toFixed(0)}/10` : 'N/O'}
                           </span>
                         </div>
