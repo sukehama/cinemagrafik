@@ -31,12 +31,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
-          tagName: v1.0.0-${{ github.run_number }}
-          releaseName: 'Automated Release v1.0.0-${{ github.run_number }}'
+          tagName: v0.4.1
+          releaseName: 'CinemaGrafik v0.4.1'
           releaseDraft: true
           prerelease: false
 
-# 2. BUILD ANDROID APK
+  # 2. BUILD ANDROID APK
   build-android:
     needs: build-windows
     permissions:
@@ -78,14 +78,15 @@ jobs:
 
       - name: Sign Android APK
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > release.jks
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d -i > release.jks
           $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks release.jks --ks-pass pass:"${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" --key-pass pass:"${{ secrets.ANDROID_KEY_PASSWORD }}" --out src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-signed.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 
-      - name: Attach Signed APK to Draft Release
+      - name: Attach Signed APK to Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          tag_name: v1.0.0-${{ github.run_number }}
+          tag_name: v0.4.1
+          name: 'CinemaGrafik v0.4.1'
           files: src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-signed.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
